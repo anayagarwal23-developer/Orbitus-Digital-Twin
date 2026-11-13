@@ -18,7 +18,7 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.team_members
-    where lower(email) = lower(auth.jwt() ->> 'email')
+    where lower(btrim(email, E' \n\r\t')) = lower(btrim(auth.jwt() ->> 'email'))
   );
 $$;
 
