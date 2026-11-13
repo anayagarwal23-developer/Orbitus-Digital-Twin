@@ -150,7 +150,8 @@
   var ICONS = {
     chat: "M4 5h16v11H9l-5 4z",
     calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
-    missions: "M4 6l2 2 3-3M4 13l2 2 3-3M13 7h7M13 14h7M4 20h16"
+    missions: "M4 6l2 2 3-3M4 13l2 2 3-3M13 7h7M13 14h7M4 20h16",
+    settings: "M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M9 14.5v5"
   };
   function icon(name) {
     var ns = "http://www.w3.org/2000/svg";
@@ -163,21 +164,21 @@
   function buildShell() {
     ui = {};
     ui.tabs = {};
-    ui.views = { chat: chatView(), calendar: calendarView(), missions: missionsView() };
-    var nav = h("nav", { class: "tabs", "aria-label": "Sections" }, ["chat", "calendar", "missions"].map(function (t) {
+    ui.views = { chat: chatView(), calendar: calendarView(), missions: missionsView(), settings: settingsView() };
+    var nav = h("nav", { class: "tabs", "aria-label": "Sections" }, ["chat", "calendar", "missions", "settings"].map(function (t) {
       var label = t.charAt(0).toUpperCase() + t.slice(1);
       var dot = t === "chat" ? (ui.unread = h("b", { class: "unread", hidden: true, "aria-label": "new messages" })) : null;
       return (ui.tabs[t] = h("button", { type: "button", onclick: function () { go(t); } }, icon(t), h("span", null, label), dot));
     }));
     ui.acctName = h("span");
     ui.acctInit = h("b");
-    var acct = h("button", { class: "acct", type: "button", onclick: openAccount, "aria-label": "Account" }, ui.acctInit, ui.acctName);
+    var acct = h("button", { class: "acct", type: "button", onclick: function () { go("settings"); }, "aria-label": "Settings" }, ui.acctInit, ui.acctName);
     clear(app).append(h("div", { class: "shell" },
       h("div", { class: "brand" }, h("div", { class: "wordmark sm" }, "ORB", h("i", null, "!"), "TUS"), h("p", { class: "mono sub" }, "Digital twin")),
       acct, nav,
       h("main", { class: "main" },
         store.demo && h("p", { class: "demo-bar mono" }, "Demo mode · saved in this browser only"),
-        ui.views.chat, ui.views.calendar, ui.views.missions)));
+        ui.views.chat, ui.views.calendar, ui.views.missions, ui.views.settings)));
     TABLES.forEach(paint);
     go(state.tab);
     if (stopWatching) stopWatching();
@@ -198,43 +199,83 @@
     if (table === "profiles") {
       var me = nameOf(state.user.id);
       ui.acctName.textContent = me; ui.acctInit.textContent = me.charAt(0).toUpperCase();
-      paintChat(); paintCalendar(); paintMissions(); paintOwners();
+      paintChat(); paintCalendar(); paintMissions(); paintOwners(); paintSettings();
     }
     if (table === "messages") paintChat();
     if (table === "events") paintCalendar();
     if (table === "missions") paintMissions();
   }
 
-  /* ---------- account ---------- */
-  function openAccount() {
-    var name = h("input", { type: "text", id: "acName", maxlength: 40, value: nameOf(state.user.id) });
-    var pw = h("input", { type: "password", id: "acPw", autocomplete: "new-password", minlength: 8, placeholder: "Leave empty to keep it" });
-    var msg = h("p", { class: "form-msg", role: "alert" });
-    var dlg = h("dialog", { class: "sheet" });
-    function close() { dlg.close(); dlg.remove(); }
-    dlg.append(h("form", { onsubmit: function (e) {
-      e.preventDefault();
-      var jobs = [], n = name.value.trim();
-      if (!n) { msg.textContent = "Name cannot be empty."; return; }
-      if (pw.value && pw.value.length < 8) { msg.textContent = "Use at least 8 characters."; return; }
-      if (n !== nameOf(state.user.id)) jobs.push(store.saveName(state.user.id, n));
-      if (pw.value) jobs.push(store.setPassword(pw.value));
-      Promise.all(jobs).then(function () { refresh("profiles"); close(); if (jobs.length) toast("Saved."); })
-        .catch(function (err) { msg.textContent = err.message || "Could not save."; });
-    } },
-      h("h2", null, "Account"),
-      h("p", { class: "mono dim" }, state.user.email),
-      h("label", { for: "acName" }, "Display name"), name,
-      h("label", { for: "acPw" }, "New password"), pw,
-      msg,
-      h("div", { class: "row" },
-        h("button", { class: "btn primary", type: "submit" }, "Save"),
-        h("button", { class: "btn", type: "button", onclick: close }, "Cancel"),
-        h("button", { class: "btn danger push", type: "button", onclick: function () {
-          close(); store.signOut().then(function () { leave(); showLogin(); });
-        } }, "Sign out"))));
-    dlg.addEventListener("cancel", function () { dlg.remove(); });
-    document.body.append(dlg); dlg.showModal();
+  /* ---------- settings ---------- */
+  function settingsView() {
+    ui.setName = h("input", { type: "text", id: "setName", maxlength: 40, autocomplete: "given-name" });
+    ui.team = h("ul", { class: "team-list" });
+    var nameMsg = h("p", { class: "form-msg", role: "status" });
+    var cur = h("input", { type: "password", id: "pwCur", autocomplete: "current-password" });
+    var pw = h("input", { type: "password", id: "pwNew", autocomplete: "new-password", minlength: 8 });
+    var pw2 = h("input", { type: "password", id: "pwAgain", autocomplete: "new-password", minlength: 8 });
+    var show = h("input", { type: "checkbox", id: "pwShow", onchange: function () {
+      [cur, pw, pw2].forEach(function (i) { i.type = show.checked ? "text" : "password"; });
+    } });
+    var pwMsg = h("p", { class: "form-msg", role: "status" });
+    var pwBtn = h("button", { class: "btn primary", type: "submit" }, "Change password");
+    function say(el, text, good) { el.textContent = text; el.classList.toggle("ok", !!good); }
+
+    return h("section", { class: "view settings", "aria-label": "Settings", hidden: true },
+      h("header", { class: "view-h" }, h("h1", null, "Settings"), h("p", { class: "mono dim" }, "Your account")),
+      h("div", { class: "set-grid" },
+        h("form", { class: "card", novalidate: true, onsubmit: function (e) {
+          e.preventDefault();
+          var n = ui.setName.value.trim();
+          if (!n) { say(nameMsg, "Name cannot be empty."); return; }
+          store.saveName(state.user.id, n).then(function () { refresh("profiles"); say(nameMsg, "Name saved.", true); })
+            .catch(function (err) { say(nameMsg, err.message || "Could not save."); });
+        } },
+          h("h2", null, "Profile"),
+          h("label", null, "Signed in as"), h("p", { class: "set-email" }, state.user.email),
+          h("label", { for: "setName" }, "Display name"), ui.setName,
+          h("div", { class: "row" }, h("button", { class: "btn primary", type: "submit" }, "Save name")), nameMsg),
+
+        h("form", { class: "card", novalidate: true, onsubmit: function (e) {
+          e.preventDefault();
+          if (!cur.value) { say(pwMsg, "Enter your current password."); cur.focus(); return; }
+          if (pw.value.length < 8) { say(pwMsg, "The new password needs at least 8 characters."); pw.focus(); return; }
+          if (pw.value !== pw2.value) { say(pwMsg, "The two new passwords do not match."); pw2.focus(); return; }
+          if (pw.value === cur.value) { say(pwMsg, "Choose a password different from the current one."); pw.focus(); return; }
+          pwBtn.disabled = true; say(pwMsg, "");
+          store.checkPassword(state.user.email, cur.value).then(function () {
+            return store.setPassword(pw.value);
+          }).then(function () {
+            cur.value = pw.value = pw2.value = "";
+            say(pwMsg, "Password changed.", true);
+          }, function (err) {
+            say(pwMsg, /invalid/i.test(err.message || "") ? "The current password is not right." : (err.message || "Could not change the password."));
+          }).then(function () { pwBtn.disabled = false; });
+        } },
+          h("h2", null, "Password"),
+          h("label", { for: "pwCur" }, "Current password"), cur,
+          h("label", { for: "pwNew" }, "New password"), pw,
+          h("label", { for: "pwAgain" }, "New password again"), pw2,
+          h("label", { class: "check", for: "pwShow" }, show, "Show passwords"),
+          h("div", { class: "row" }, pwBtn), pwMsg),
+
+        h("div", { class: "card" }, h("h2", null, "Team"), ui.team),
+
+        h("div", { class: "card" },
+          h("h2", null, "Sign out"),
+          h("p", { class: "dim" }, "You will need your email and password to get back in."),
+          h("div", { class: "row" }, h("button", { class: "btn danger", type: "button", onclick: function () {
+            store.signOut().then(function () { leave(); showLogin(); });
+          } }, "Sign out")))));
+  }
+  function paintSettings() {
+    if (!ui.team) return;
+    if (document.activeElement !== ui.setName) ui.setName.value = nameOf(state.user.id);
+    clear(ui.team);
+    state.profiles.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (p) {
+      ui.team.append(h("li", null, h("b", null, p.name.charAt(0).toUpperCase()), h("span", null, p.name),
+        p.id === state.user.id && h("i", { class: "mono" }, "You")));
+    });
   }
 
   /* ---------- chat ---------- */
@@ -464,6 +505,7 @@
       signIn: function (email, password) { return sb.auth.signInWithPassword({ email: email, password: password }).then(function (r) { return pick(ok(r).user); }); },
       signOut: function () { return sb.auth.signOut().then(function () {}); },
       onSignedOut: function (cb) { sb.auth.onAuthStateChange(function (ev) { if (ev === "SIGNED_OUT") cb(); }); },
+      checkPassword: function (email, p) { return sb.auth.signInWithPassword({ email: email, password: p }).then(ok); },
       setPassword: function (p) { return sb.auth.updateUser({ password: p }).then(ok); },
       isTeam: function () { return sb.rpc("is_team").then(ok); },
       list: function (t) { return orders[t](sb.from(t).select("*")).then(function (r) { var d = ok(r); return t === "messages" ? d.reverse() : d; }); },
@@ -520,6 +562,7 @@
       signIn: function (email) { db.signedIn = true; db.email = email; return done(user()); },
       signOut: function () { db.signedIn = false; return done(); },
       onSignedOut: function () {},
+      checkPassword: function () { return Promise.resolve(); },
       setPassword: function () { return Promise.resolve(); },
       isTeam: function () { return Promise.resolve(true); },
       list: function (t) { return Promise.resolve(JSON.parse(JSON.stringify(db[t]))); },

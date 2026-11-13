@@ -172,11 +172,25 @@ button.cell:hover{border-color:var(--olo)}
 .tick:hover{border-color:var(--olo)}
 .tick[aria-checked=true]{background:var(--olo);border-color:var(--olo)}
 
-/* account sheet + toast */
-.sheet{width:min(420px,calc(100% - 32px));padding:26px;border:1px solid var(--line);border-radius:22px;background:#07090f;color:var(--ink)}
-.sheet::backdrop{background:rgb(0 0 0 / .7);backdrop-filter:blur(4px)}
-.sheet h2{font-size:26px;font-weight:900;letter-spacing:-.04em;margin-bottom:4px}
-.sheet .row{margin-top:8px}
+/* settings */
+.view.settings{overflow-y:auto;padding-bottom:28px}
+.set-grid{display:grid;gap:16px;align-items:start}
+@media(min-width:900px){.set-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{padding:22px;border:1px solid var(--line-2);border-radius:18px;background:var(--glass)}
+.card h2{font-size:22px;font-weight:800;letter-spacing:-.03em}
+.card .row{margin-top:18px}
+.card > p.dim{margin-top:8px;font-size:15px}
+.set-email{overflow-wrap:anywhere}
+.form-msg.ok{color:var(--olo)}
+label.check{display:flex;align-items:center;gap:10px;margin-top:16px;cursor:pointer}
+label.check input{width:20px;height:20px;min-height:0;padding:0;accent-color:var(--olo)}
+.team-list li{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-2)}
+.team-list li:last-child{border:0}
+.team-list b{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;background:var(--laser);font-weight:800}
+.team-list span{flex:1;min-width:0;overflow-wrap:anywhere}
+.team-list i{font-style:normal;color:var(--olo)}
+
+/* toast */
 .toast{position:fixed;left:50%;bottom:92px;z-index:20;max-width:calc(100% - 32px);padding:11px 18px;border:1px solid var(--line);border-radius:999px;
   background:#07090f;font-size:14px;opacity:0;transform:translate(-50%,10px);pointer-events:none;transition:opacity .25s,transform .25s}
 .toast.on{opacity:1;transform:translate(-50%,0)}
