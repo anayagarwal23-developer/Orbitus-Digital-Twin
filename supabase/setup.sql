@@ -98,6 +98,12 @@ create policy "team deletes missions" on public.missions for delete to authentic
 -- People who are not signed in get nothing at all.
 revoke all on public.team_members, public.profiles, public.messages, public.events, public.missions from anon;
 
+-- Signed-in people may use the tables; the rules above decide which rows.
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, delete on public.messages to authenticated;
+grant select, insert, update, delete on public.events, public.missions to authenticated;
+grant execute on function public.is_team() to authenticated;
+
 -- 4. Live updates -------------------------------------------------------
 do $$
 declare t text;
