@@ -28,9 +28,10 @@
   var store = cfg.url && cfg.anonKey ? supaStore(cfg) : demoStore();
   var app = document.getElementById("app");
 
+  var startTab = new URLSearchParams(location.search).get("tab");
   var state = {
     user: null,
-    tab: "chat",
+    tab: /^(chat|calendar|missions|settings)$/.test(startTab || "") ? startTab : "chat",
     profiles: [], messages: [], events: [], missions: [], reactions: [],
     month: startOfMonth(new Date()),
     day: ymd(new Date()),
@@ -150,6 +151,7 @@
       btn,
       h("button", { class: "linkish", type: "button", onclick: function () { showForgot(email.value.trim()); } }, "Forgot password?"),
       msg,
+      !isInstalled() && h("div", { class: "dl-login" }, downloadButton("ghost")),
       store.demo && h("p", { class: "demo-note" }, "Demo mode: not connected yet. Any email and password opens a sample workspace that is saved only in this browser.")
     );
     clear(app).append(card(form));
@@ -223,6 +225,7 @@
     if (stopWatching) { stopWatching(); stopWatching = null; }
     state.user = null; state.replyTo = null; state.file = null; state.urls = {}; ui = {};
     document.title = TITLE;
+    try { if (navigator.clearAppBadge) navigator.clearAppBadge().catch(function () {}); } catch (e) {}
   }
   function load(table) {
     return store.list(table).then(function (rows) { state[table] = rows; });
@@ -446,29 +449,93 @@
             store.signOut().then(function () { leave(); showLogin(); });
           } }, "Sign out")))));
   }
+  /* ---------- download / install ---------- */
   function isInstalled() {
     return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   }
+  function platform() {
+    var ua = navigator.userAgent;
+    var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    var os = ios ? (/iPad/.test(ua) || /Macintosh/.test(ua) ? "iPad" : "iPhone")
+      : /Android/.test(ua) ? "Android" : /CrOS/.test(ua) ? "Chromebook" : /Windows/.test(ua) ? "Windows"
+      : /Macintosh|Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "this device";
+    var browser = /EdgiOS|EdgA|Edg\//.test(ua) ? "Edge" : /SamsungBrowser/.test(ua) ? "Samsung Internet"
+      : /FxiOS|Firefox\//.test(ua) ? "Firefox" : /CriOS|Chrome\//.test(ua) ? "Chrome"
+      : /Safari\//.test(ua) ? "Safari" : "your browser";
+    return { os: os, browser: browser, ios: ios };
+  }
+  function downloadLabel() {
+    if (isInstalled()) return "Installed on this device";
+    var os = platform().os;
+    return os === "this device" ? "Download the app" : "Download for " + os;
+  }
+  function installSteps(pf) {
+    if (pf.ios && pf.browser === "Safari") return [
+      "Tap the Share button " + (pf.os === "iPad" ? "at the top of the screen" : "at the bottom of the screen") + " (the square with an arrow).",
+      "Scroll down and tap Add to Home Screen.",
+      "Tap Add. Orbitus appears on your home screen."];
+    if (pf.ios) return [
+      "Tap the Share button in " + pf.browser + " (in or next to the address bar).",
+      "Tap Add to Home Screen, then Add.",
+      "Don't see it? Open this page in Safari and try there."];
+    if (pf.os === "Mac" && pf.browser === "Safari") return [
+      "In the menu bar, click File.",
+      "Choose Add to Dock, then Add.",
+      "Orbitus appears in your Dock and Launchpad."];
+    if (pf.browser === "Firefox" && pf.os !== "Android") return [
+      "Firefox on computers can't install apps.",
+      "Open this page in Chrome or Edge" + (pf.os === "Mac" ? ", or in Safari" : "") + ".",
+      "Then press Download again."];
+    if (pf.os === "Android" && pf.browser === "Samsung Internet") return [
+      "Tap the menu button (three lines) at the bottom.",
+      "Tap Add page to, then Home screen.",
+      "Tap Add."];
+    if (pf.os === "Android") return [
+      "Tap the menu button (three dots) in " + pf.browser + ".",
+      "Tap Install app (or Add to Home screen).",
+      "Tap Install. Orbitus appears with your other apps."];
+    if (pf.browser === "Edge") return [
+      "Click the menu (three dots) at the top right.",
+      "Choose Apps, then Install this site as an app.",
+      "Click Install. Orbitus opens in its own window."];
+    return [
+      "Click the install icon at the right end of the address bar, or open the menu (three dots).",
+      "Choose Cast, save and share, then Install page as app (or just Install Orbitus).",
+      "Click Install. Orbitus opens in its own window and appears with your apps."];
+  }
+  function download() {
+    if (isInstalled()) { toast("Orbitus is already installed on this device."); return; }
+    if (installOffer) {
+      var offer = installOffer; installOffer = null;
+      offer.prompt();
+      offer.userChoice.then(function (c) { if (c.outcome === "accepted") toast("Installing Orbitus…"); paintInstall(); }, paintInstall);
+      return;
+    }
+    var pf = platform();
+    var dlg = h("dialog", { class: "sheet" });
+    function close() { dlg.close(); dlg.remove(); }
+    dlg.append(
+      h("div", { class: "dl-head" }, h("img", { src: "/icons/icon-192.png", alt: "", width: 56, height: 56 }),
+        h("div", null, h("h2", null, "Get Orbitus"), h("p", { class: "mono dim" }, pf.os === "this device" ? pf.browser : pf.os + " · " + pf.browser))),
+      h("ol", { class: "steps" }, installSteps(pf).map(function (t) { return h("li", null, t); })),
+      h("div", { class: "row" }, h("button", { class: "btn primary", type: "button", onclick: close }, "Done")));
+    dlg.addEventListener("cancel", function () { dlg.remove(); });
+    document.body.append(dlg); dlg.showModal();
+  }
+  function downloadButton(cls) {
+    var b = h("button", { class: "btn " + (cls || "primary") + " dl-btn", type: "button", onclick: download, disabled: isInstalled() || null }, icon("download"), downloadLabel());
+    return b;
+  }
   function paintInstall() {
+    document.querySelectorAll(".dl-btn").forEach(function (b) {
+      b.lastChild.textContent = downloadLabel();
+      b.disabled = isInstalled();
+    });
     if (!ui.install) return;
-    var ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-    var body;
-    if (isInstalled()) body = h("p", { class: "dim" }, "You are using the installed app.");
-    else if (installOffer) body = [h("p", { class: "dim" }, "Add Orbitus to your home screen or desktop so it opens like an app."),
-      h("div", { class: "row" }, h("button", { class: "btn primary", type: "button", onclick: function () {
-        var offer = installOffer; installOffer = null;
-        offer.prompt();
-        offer.userChoice.then(paintInstall, paintInstall);
-      } }, "Install Orbitus"))];
-    else if (ios) body = h("ol", { class: "steps dim" },
-      h("li", null, "Open Orbitus in Safari."),
-      h("li", null, "Tap the Share button (the square with an arrow)."),
-      h("li", null, "Choose Add to Home Screen, then Add."));
-    else body = h("ol", { class: "steps dim" },
-      h("li", null, "Open Orbitus in Chrome or Edge."),
-      h("li", null, "Phone: open the browser menu and choose Install app or Add to Home screen."),
-      h("li", null, "Computer: click the install icon at the right end of the address bar."));
-    clear(ui.install).append(h("h2", null, "Install the app"), body);
+    clear(ui.install).append(h("h2", null, "Get the app"),
+      h("p", { class: "dim" }, isInstalled() ? "You are using the installed app." :
+        "Install Orbitus so it opens from your home screen or desktop like any other app, with a badge for new messages."),
+      !isInstalled() && h("div", { class: "row" }, downloadButton()));
   }
   function paintSettings() {
     if (!ui.team) return;
@@ -704,6 +771,7 @@
     var n = state.messages.filter(function (m) { return m.id > seen && m.user_id !== me; }).length;
     if (ui.unread) { ui.unread.hidden = !n; ui.unread.setAttribute("aria-label", n + " new messages"); }
     document.title = n ? "(" + n + ") " + TITLE : TITLE;
+    try { if (navigator.setAppBadge) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(function () {}); } catch (e) {}
   }
 
   /* ---------- calendar export ---------- */
