@@ -240,6 +240,14 @@ button.cell:hover{border-color:var(--olo)}
 .form-msg.ok{color:var(--olo)}
 label.check{display:flex;align-items:center;gap:10px;margin-top:16px;cursor:pointer}
 label.check input{width:20px;height:20px;min-height:0;padding:0;accent-color:var(--olo)}
+.steps{margin:12px 0 0;padding-left:22px;font-size:15.5px;line-height:1.45}
+.dl-head{display:flex;align-items:center;gap:14px}
+.dl-head img{border-radius:14px}
+.dl-head h2{margin:0}
+.dl-login{margin-top:18px;padding-top:18px;border-top:1px solid var(--line-2)}
+.dl-login .btn{width:100%;margin:0}
+.btn.ghost{background:transparent}
+.steps li + li{margin-top:6px}
 .team-list li{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-2)}
 .team-list li:last-child{border:0}
 .team-list b{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;background:var(--laser);font-weight:800}
