@@ -16,6 +16,14 @@
   var recovering = /type=recovery/.test(startHash);
   var linkError = (startHash.match(/error_description=([^&]+)/) || [])[1];
 
+  // installable app: offline helper plus the browser's install offer
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); });
+  }
+  var installOffer = null;
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installOffer = e; paintInstall(); });
+  window.addEventListener("appinstalled", function () { installOffer = null; paintInstall(); });
+
   var cfg = window.ORBITUS_CONFIG || {};
   var store = cfg.url && cfg.anonKey ? supaStore(cfg) : demoStore();
   var app = document.getElementById("app");
@@ -427,6 +435,8 @@
           h("h2", null, "Password"), f.nodes,
           h("div", { class: "row" }, pwBtn), pwMsg),
 
+        (ui.install = h("div", { class: "card" })),
+
         h("div", { class: "card" }, h("h2", null, "Team"), ui.team),
 
         h("div", { class: "card" },
@@ -436,8 +446,33 @@
             store.signOut().then(function () { leave(); showLogin(); });
           } }, "Sign out")))));
   }
+  function isInstalled() {
+    return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  }
+  function paintInstall() {
+    if (!ui.install) return;
+    var ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    var body;
+    if (isInstalled()) body = h("p", { class: "dim" }, "You are using the installed app.");
+    else if (installOffer) body = [h("p", { class: "dim" }, "Add Orbitus to your home screen or desktop so it opens like an app."),
+      h("div", { class: "row" }, h("button", { class: "btn primary", type: "button", onclick: function () {
+        var offer = installOffer; installOffer = null;
+        offer.prompt();
+        offer.userChoice.then(paintInstall, paintInstall);
+      } }, "Install Orbitus"))];
+    else if (ios) body = h("ol", { class: "steps dim" },
+      h("li", null, "Open Orbitus in Safari."),
+      h("li", null, "Tap the Share button (the square with an arrow)."),
+      h("li", null, "Choose Add to Home Screen, then Add."));
+    else body = h("ol", { class: "steps dim" },
+      h("li", null, "Open Orbitus in Chrome or Edge."),
+      h("li", null, "Phone: open the browser menu and choose Install app or Add to Home screen."),
+      h("li", null, "Computer: click the install icon at the right end of the address bar."));
+    clear(ui.install).append(h("h2", null, "Install the app"), body);
+  }
   function paintSettings() {
     if (!ui.team) return;
+    paintInstall();
     if (document.activeElement !== ui.setName) ui.setName.value = nameOf(state.user.id);
     clear(ui.team);
     state.profiles.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (p) {

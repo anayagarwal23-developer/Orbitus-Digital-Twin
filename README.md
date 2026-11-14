@@ -9,6 +9,8 @@ Private workspace for Team N!TRO. Members only.
 - **Missions:** shared checklist with categories, owners and due dates.
 - **Settings:** display name, password change, team list, sign out.
 - **Forgot password** link on the sign-in screen.
+- **Installable app:** add it to a phone home screen or computer. Settings has
+  the steps for each device.
 
 ## How it is kept private
 
@@ -51,4 +53,5 @@ browser, so the screens can be tried before anything is connected.
 - `supabase/setup.sql`: tables, storage and privacy rules (everything)
 - `supabase/upgrade-1.sql`: the same additions for a project set up before them
 - `vendor/`: Supabase browser library (v2.119.0)
+- `manifest.webmanifest`, `sw.js`, `icons/`: what makes it installable
 - `vercel.json`: security headers
