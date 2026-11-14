@@ -1,7 +1,14 @@
 # Orbitus Digital Twin
 
-Private workspace for Team N!TRO: team chat, a shared calendar and a shared
-missions checklist. Members only.
+Private workspace for Team N!TRO. Members only.
+
+- **Chat:** replies, emoji reactions, @mentions, photos and files (up to 10 MB),
+  and an unread count in the browser tab.
+- **Calendar:** shared events you can edit, mission due dates shown on the
+  days, and export to Google or Apple Calendar (.ics file).
+- **Missions:** shared checklist with categories, owners and due dates.
+- **Settings:** display name, password change, team list, sign out.
+- **Forgot password** link on the sign-in screen.
 
 ## How it is kept private
 
@@ -24,7 +31,9 @@ Hiding the link is not what protects it. The login is.
    same emails.
 6. **Connect the app.** Project Settings → API. Copy the Project URL and the
    `anon` `public` key into `config.js`.
-7. **Host it.** Import this repository into Vercel as a new project (no build
+7. **Reset emails.** Authentication → URL Configuration: set Site URL to the
+   app's address and add the same address under Redirect URLs.
+8. **Host it.** Import this repository into Vercel as a new project (no build
    settings needed) and give it an address.
 
 Each teammate can change their name and password from the account button
@@ -39,6 +48,7 @@ browser, so the screens can be tried before anything is connected.
 
 - `index.html`, `app.css`, `app.js`: the app
 - `config.js`: Supabase connection settings
-- `supabase/setup.sql`: tables and privacy rules
+- `supabase/setup.sql`: tables, storage and privacy rules (everything)
+- `supabase/upgrade-1.sql`: the same additions for a project set up before them
 - `vendor/`: Supabase browser library (v2.119.0)
 - `vercel.json`: security headers
