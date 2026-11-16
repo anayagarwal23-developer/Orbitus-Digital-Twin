@@ -1,0 +1,9 @@
+{
+  "name": "orbitus-digital-twin",
+  "private": true,
+  "description": "Private team workspace. A static site plus one small function that sends phone notifications.",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}
