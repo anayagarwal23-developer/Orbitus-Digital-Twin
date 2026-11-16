@@ -219,10 +219,6 @@ button.cell:hover{border-color:var(--olo)}
 /* missions */
 .prog{height:6px;border-radius:99px;background:var(--line-2);overflow:hidden;margin-bottom:18px}
 .prog i{display:block;height:100%;width:0;border-radius:99px;background:var(--olo);transition:width .5s var(--ease)}
-.m-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.m-form > input[type=text]{grid-column:1 / -1}
-.m-form .slot select{width:100%}
-@media(min-width:1000px){.m-form{grid-template-columns:minmax(0,1fr) 150px 140px 150px auto}.m-form > input[type=text]{grid-column:auto}}
 .chips.scroll{margin-top:0;overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap;padding-bottom:2px}
 .chips.scroll::-webkit-scrollbar{display:none}
 .chip{flex:none}
@@ -421,3 +417,89 @@ a.btn[aria-disabled]{opacity:.5;pointer-events:none}
 .jump{position:absolute;right:0;bottom:calc(100% + 10px);z-index:4;min-height:38px;padding:0 14px;border:1px solid var(--line);border-radius:999px;
   background:#07090f;color:var(--olo);box-shadow:0 8px 24px rgb(0 0 0 / .5)}
 .jump:hover{border-color:var(--olo)}
+
+/* ============================================================
+   Apple-style polish. Same colours and type, calmer behaviour.
+   ============================================================ */
+html{-webkit-tap-highlight-color:transparent}
+button,a,select,input,summary{touch-action:manipulation}
+
+/* press feedback */
+.btn,.chip,.stat,.seg button,.more-list button,.cell,.ibtn,.x,.react,.pick,.act,.poll-opt,.acct,.jump{transition:transform .14s var(--ease),background .2s,border-color .2s,color .2s,opacity .2s}
+.btn:active,.chip:active,button.stat:active,.more-list button:active,.acct:active,.poll-opt:active,.jump:active{transform:scale(.97)}
+.ibtn:active,.x:active,.cell:active,.react:active,.pick:active,.tick:active{transform:scale(.9)}
+.tabs button svg{transition:transform .18s var(--ease)}
+.tabs button:active svg{transform:scale(.88)}
+
+/* screens ease in */
+.view:not([hidden]){animation:viewIn .26s var(--ease)}
+@keyframes viewIn{from{opacity:0;transform:translateY(8px)}}
+
+/* segmented control */
+.seg{display:inline-flex;max-width:100%;padding:3px;border-radius:13px;background:rgb(255 255 225 / .07);border:1px solid var(--line-2)}
+.seg button{flex:1;min-height:36px;padding:0 14px;border:0;border-radius:10px;background:transparent;color:var(--mut);font-size:14px;font-weight:600;white-space:nowrap}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed=true]{background:rgb(0 255 204 / .16);color:var(--olo);box-shadow:0 1px 6px rgb(0 0 0 / .35)}
+.seg.wide{display:flex;margin-top:14px}
+@media(max-width:420px){.seg button{padding:0 9px;font-size:13px}}
+
+/* grouped lists: one rounded block, hairlines between rows */
+.m-list,.rec-list,.ev-list{padding:2px 16px;border:1px solid var(--line-2);border-radius:18px;background:var(--glass)}
+.card .m-list,.card .rec-list,.card .ev-list{padding:0;border:0;border-radius:0;background:none}
+.m-list li:last-child,.rec-list li:last-child,.ev-list li:last-child{border-bottom:0}
+.rec-list:empty,.ev-list:empty,.m-list:empty{display:none}
+
+/* missions */
+.m-form{display:block;margin-bottom:14px}
+.m-quick{display:flex;gap:10px}
+.m-quick input{flex:1;min-width:0;min-height:50px;border-radius:16px;font-size:17px}
+.m-quick .btn{min-height:50px}
+.m-more{margin-top:8px}
+.m-more summary{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 4px;color:var(--olo);font-size:14px;font-weight:600;cursor:pointer;list-style:none;border-radius:8px}
+.m-more summary::-webkit-details-marker{display:none}
+.m-more summary::before{content:"+";display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:rgb(0 255 204 / .14);font-size:15px;line-height:1;transition:transform .2s var(--ease)}
+.m-more[open] summary::before{transform:rotate(45deg)}
+.m-opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:4px;padding:4px 14px 14px;border:1px solid var(--line-2);border-radius:16px;background:var(--glass)}
+.m-opts label{margin-top:12px}
+.m-opts .slot select{width:100%}
+@media(max-width:620px){.m-opts{grid-template-columns:1fr}}
+.m-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
+.area-pick{width:auto;min-height:44px;padding-left:14px;border-radius:13px;font-size:14px;font-weight:600;color:var(--ink)}
+.m-group{margin-top:18px}
+.m-group h2{display:flex;align-items:center;gap:8px;margin:0 6px 8px;color:var(--mut);font-size:11.5px}
+.m-group h2 span{padding:1px 7px;border-radius:99px;background:rgb(255 255 225 / .1);color:var(--ink);letter-spacing:0}
+.m-group.late h2{color:var(--pink)}
+.m-group.late h2 span{background:rgb(240 79 106 / .2)}
+.m-group.fin h2{color:var(--olo)}
+.empty.big{padding:44px 12px;text-align:center;font-size:16px}
+.m-list li{gap:6px;padding:6px 0}
+.m-list.compact li{padding:4px 0}
+.m-open{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding:9px 6px;border:0;border-radius:10px;background:transparent;text-align:left;color:var(--ink)}
+.m-open:hover{background:rgb(255 255 225 / .04)}
+.m-open strong{font-size:16px;font-weight:600;line-height:1.3;overflow-wrap:anywhere;transition:color .3s,opacity .3s}
+.m-meta{font-size:11px;line-height:1.5}
+.m-list .done strong{color:var(--mut);text-decoration:line-through}
+.tick{width:26px;height:26px;margin:9px 5px 9px 0;border-radius:50%;font-size:14px;transition:background .25s var(--ease),border-color .25s,transform .25s var(--ease)}
+.ticking .tick{background:var(--olo);border-color:var(--olo);transform:scale(1.14)}
+.ticking strong{color:var(--mut);text-decoration:line-through}
+.m-list .x{opacity:.55}
+.m-list .x:hover{opacity:1}
+
+/* floating layers pick up what is behind them */
+.toast,.jump,.actions,.suggest{background:rgb(7 9 15 / .78);-webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4)}
+
+/* dialogs: ease in; on phones, choices rise from the bottom like an action sheet */
+dialog.sheet[open],dialog.lightbox[open]{animation:pop .24s var(--ease)}
+dialog[open]::backdrop{animation:fade .24s ease}
+@keyframes pop{from{opacity:0;transform:scale(.96)}}
+@keyframes fade{from{opacity:0}}
+@keyframes rise{from{transform:translateY(100%)}}
+@media(max-width:620px){
+  dialog.sheet.action{inset:auto 0 0 0;width:100%;max-width:none;margin:0;padding:14px 20px calc(22px + env(safe-area-inset-bottom));
+    border-width:1px 0 0;border-radius:24px 24px 0 0}
+  dialog.sheet.action[open]{animation:rise .34s var(--ease)}
+  dialog.sheet.action::before{content:"";display:block;width:38px;height:5px;margin:0 auto 16px;border-radius:99px;background:rgb(255 255 225 / .24)}
+  dialog.sheet.action .row{flex-direction:column;align-items:stretch}
+  dialog.sheet.action .row .btn{width:100%;min-height:50px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}

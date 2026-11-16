@@ -186,7 +186,7 @@
 
   // shared records are deleted for the whole team, so one stray tap should not be enough
   function confirmDelete(what, run) {
-    var dlg = h("dialog", { class: "sheet confirm", role: "alertdialog", "aria-labelledby": "cfTitle", "aria-describedby": "cfText" });
+    var dlg = h("dialog", { class: "sheet confirm action", role: "alertdialog", "aria-labelledby": "cfTitle", "aria-describedby": "cfText" });
     function close() { dlg.close(); dlg.remove(); }
     var cancel = h("button", { class: "btn", type: "button", onclick: close }, "Keep it");
     dlg.append(h("h2", { id: "cfTitle" }, "Delete this?"),
@@ -844,7 +844,7 @@
       return;
     }
     var pf = platform();
-    var dlg = h("dialog", { class: "sheet" });
+    var dlg = h("dialog", { class: "sheet action" });
     function close() { dlg.close(); dlg.remove(); }
     dlg.append(
       h("div", { class: "dl-head" }, h("img", { src: "/icons/icon-192.png", alt: "", width: 56, height: 56 }),
@@ -926,12 +926,12 @@
       return;
     }
     var msg = h("p", { class: "form-msg", role: "status" });
-    var chips = h("div", { class: "chips", role: "group", "aria-label": "Notify me about" });
+    var chips = h("div", { class: "seg wide", role: "group", "aria-label": "Notify me about" });
     box.append(h("p", { class: "dim" }, "Get a notification on this device when the team posts, even when Orbitus is closed."), chips, msg);
     function draw(current) {
       clear(chips);
       [["off", "Off"], ["mentions", "Mentions only"], ["all", "Every message"]].forEach(function (o) {
-        chips.append(h("button", { type: "button", class: "chip mono", "aria-pressed": o[0] === current ? "true" : "false", onclick: function () {
+        chips.append(h("button", { type: "button", "aria-pressed": o[0] === current ? "true" : "false", onclick: function () {
           say(msg, "Saving…", true);
           setPush(o[0]).then(function () {
             draw(o[0]); load("push_subscriptions");
@@ -1483,16 +1483,28 @@
   }
 
   /* ---------- missions ---------- */
+  // an iOS-style segmented control: one choice out of a few
+  function segmented(label, options, onPick) {
+    var buttons = {};
+    var el = h("div", { class: "seg", role: "group", "aria-label": label }, options.map(function (o) {
+      return (buttons[o[0]] = h("button", { type: "button", "aria-pressed": "false", onclick: function () { onPick(o[0]); } }, o[1]));
+    }));
+    el.select = function (value) {
+      Object.keys(buttons).forEach(function (k) { buttons[k].setAttribute("aria-pressed", k === value ? "true" : "false"); });
+    };
+    return el;
+  }
   function missionsView() {
     ui.progText = h("p", { class: "mono" });
     ui.progBar = h("i");
-    ui.mList = h("ul", { class: "m-list" });
+    ui.mBody = h("div", { class: "m-groups" });
     ui.ownerSlot = h("div", { class: "slot" });
-    ui.filters = {};
-    ui.cats = {};
-    var title = h("input", { type: "text", maxlength: 200, required: true, placeholder: "Add a mission", "aria-label": "Mission" });
+    var title = h("input", { type: "text", maxlength: 200, required: true, enterkeyhint: "done", placeholder: "Add a mission and press Enter", "aria-label": "New mission" });
     var cat = categorySelect("newCat", "");
-    var due = h("input", { type: "date", "aria-label": "Due date (optional)", title: "Due date (optional)" });
+    var due = h("input", { type: "date", id: "newDue" });
+    ui.mStatus = segmented("Show", [["open", "To do"], ["mine", "Mine"], ["done", "Done"], ["all", "All"]], function (v) { state.filter = v; paintMissions(); });
+    ui.mArea = h("select", { class: "area-pick", "aria-label": "Area", onchange: function () { state.cat = ui.mArea.value; paintMissions(); } },
+      h("option", { value: "all" }, "All areas"), CATEGORIES.map(function (c) { return h("option", { value: c }, c); }), h("option", { value: "general" }, "General"));
     return h("section", { class: "view missions", "aria-label": "Missions", hidden: true },
       h("header", { class: "view-h" }, h("h1", null, "Missions"), ui.progText),
       h("div", { class: "prog", "aria-hidden": "true" }, ui.progBar),
@@ -1501,16 +1513,26 @@
         var t = title.value.trim();
         if (!t) { title.focus(); return; }
         var owner = ui.ownerSlot.querySelector("select");
-        store.add("missions", { user_id: state.user.id, title: t, owner: owner.value || null, category: cat.value || null, due: due.value || null })
-          .then(function () { title.value = ""; due.value = ""; refresh("missions"); }).catch(fail);
-      } }, title, cat, ui.ownerSlot, due, h("button", { class: "btn primary", type: "submit" }, "Add")),
-      h("div", { class: "chips", role: "group", "aria-label": "Show" }, [["open", "To do"], ["mine", "Mine"], ["done", "Done"], ["all", "All"]].map(function (f) {
-        return (ui.filters[f[0]] = h("button", { type: "button", class: "chip mono", onclick: function () { state.filter = f[0]; paintMissions(); } }, f[1]));
-      })),
-      h("div", { class: "chips scroll", role: "group", "aria-label": "Category" }, [["all", "All areas"]].concat(CATEGORIES.map(function (c) { return [c, c]; }), [["general", "General"]]).map(function (f) {
-        return (ui.cats[f[0]] = h("button", { type: "button", class: "chip mono", onclick: function () { state.cat = f[0]; paintMissions(); } }, f[1]));
-      })),
-      ui.mList);
+        // sensible defaults from where you are: adding under Mine assigns it to you, under an area files it there
+        store.add("missions", { user_id: state.user.id, title: t,
+          owner: owner.value || (state.filter === "mine" ? state.user.id : null),
+          category: cat.value || (CATEGORIES.indexOf(state.cat) >= 0 ? state.cat : null),
+          due: due.value || null })
+          .then(function () {
+            title.value = ""; due.value = "";
+            if (state.filter === "done") state.filter = "open";
+            refresh("missions"); title.focus();          // keep typing to add the next one
+          }).catch(fail);
+      } },
+        h("div", { class: "m-quick" }, title, h("button", { class: "btn primary", type: "submit" }, "Add")),
+        h("details", { class: "m-more" },
+          h("summary", null, "Area, owner and due date"),
+          h("div", { class: "m-opts" },
+            h("div", null, h("label", { for: "newCat" }, "Area"), cat),
+            h("div", null, h("label", { for: "newOwner" }, "Owner"), ui.ownerSlot),
+            h("div", null, h("label", { for: "newDue" }, "Due"), due)))),
+      h("div", { class: "m-bar" }, ui.mStatus, ui.mArea),
+      ui.mBody);
   }
   function paintOwners() {
     if (!ui.ownerSlot) return;
@@ -1525,50 +1547,77 @@
   }
   function dueLabel(m) {
     if (!m.due) return null;
-    var today = ymd(new Date());
+    var t = today();
     if (m.done) return h("span", null, "Due " + fmtDay(m.due));
-    if (m.due < today) return h("span", { class: "late" }, "Overdue · " + fmtDay(m.due));
-    if (m.due === today) return h("span", { class: "soon" }, "Due today");
+    if (m.due < t) return h("span", { class: "late" }, "Overdue · " + fmtDay(m.due));
+    if (m.due === t) return h("span", { class: "soon" }, "Due today");
     return h("span", null, "Due " + fmtDay(m.due));
+  }
+  // show the change at once, then save it; put things back if saving fails
+  function toggleMission(m) {
+    var patch = m.done ? { done: false, done_by: null, done_at: null }
+                       : { done: true, done_by: state.user.id, done_at: new Date().toISOString() };
+    var row = byId(state.missions, m.id);
+    if (row) Object.assign(row, patch);
+    paint("missions");
+    store.update("missions", m.id, patch).then(function () { refresh("missions"); }, function (err) { fail(err); refresh("missions"); });
   }
   function missionItem(m) {
     var meta = [h("span", { class: "tag" }, m.category || "General"), m.owner ? nameOf(m.owner) : "Anyone", dueLabel(m),
-      m.done && m.done_by ? "done by " + nameOf(m.done_by) : "added by " + nameOf(m.user_id)].filter(Boolean);
+      m.done && m.done_by ? "done by " + nameOf(m.done_by) : null].filter(Boolean);
     var line = [];
     meta.forEach(function (x, i) { if (i) line.push(" · "); line.push(x); });
     return h("li", { class: m.done ? "done" : "" },
-      h("button", { class: "tick", type: "button", role: "checkbox", "aria-checked": m.done ? "true" : "false", "aria-label": m.title, onclick: function () {
-        var patch = m.done ? { done: false, done_by: null, done_at: null }
-                           : { done: true, done_by: state.user.id, done_at: new Date().toISOString() };
-        store.update("missions", m.id, patch).then(function () { refresh("missions"); }).catch(fail);
+      h("button", { class: "tick", type: "button", role: "checkbox", "aria-checked": m.done ? "true" : "false", "aria-label": (m.done ? "Mark as not done: " : "Mark as done: ") + m.title, onclick: function (e) {
+        var btn = e.currentTarget, li = btn.closest("li");
+        if (li.classList.contains("ticking")) return;
+        if (m.done) { toggleMission(m); return; }
+        // let the tick land before the row moves to Done
+        li.classList.add("ticking"); btn.textContent = "✓"; btn.setAttribute("aria-checked", "true");
+        try { if (navigator.vibrate) navigator.vibrate(8); } catch (err) {}
+        setTimeout(function () { toggleMission(m); }, 420);
       } }, m.done ? "✓" : ""),
-      h("div", null, h("strong", null, m.title), h("p", { class: "mono dim" }, line)),
-      h("div", { class: "tools" },
-        iconBtn("edit", "Edit " + m.title, function () { editMission(m); }),
-        h("button", { class: "x", type: "button", "aria-label": "Delete " + m.title, onclick: function () {
-          confirmDelete("The mission “" + m.title + "”.", function () {
-            store.remove("missions", m.id).then(function () { refresh("missions"); }).catch(fail);
-          });
-        } }, "×")));
+      h("button", { class: "m-open", type: "button", title: "Edit", onclick: function () { editMission(m); } },
+        h("strong", null, m.title), h("span", { class: "mono dim m-meta" }, line)),
+      h("button", { class: "x", type: "button", "aria-label": "Delete " + m.title, onclick: function () {
+        confirmDelete("The mission “" + m.title + "”.", function () {
+          store.remove("missions", m.id).then(function () { refresh("missions"); }).catch(fail);
+        });
+      } }, "×"));
   }
   function paintMissions() {
-    if (!ui.mList) return;
+    if (!ui.mBody) return;
+    var me = state.user.id, t = today(), soon = new Date();
+    soon.setDate(soon.getDate() + 7);
+    var week = ymd(soon);
     var inCat = state.missions.filter(function (m) {
       return state.cat === "all" || (state.cat === "general" ? !m.category : m.category === state.cat);
     });
     var done = inCat.filter(function (m) { return m.done; }).length;
     ui.progText.textContent = inCat.length ? done + " of " + inCat.length + " complete" : "Nothing yet";
     ui.progBar.style.width = (inCat.length ? Math.round(done / inCat.length * 100) : 0) + "%";
-    Object.keys(ui.filters).forEach(function (f) { ui.filters[f].setAttribute("aria-pressed", f === state.filter ? "true" : "false"); });
-    Object.keys(ui.cats).forEach(function (f) { ui.cats[f].setAttribute("aria-pressed", f === state.cat ? "true" : "false"); });
-    var rows = inCat.filter(function (m) {
-      if (state.filter === "mine") return !m.done && m.owner === state.user.id;
-      return state.filter === "all" || (state.filter === "done") === m.done;
-    }).sort(missionSort);
-    clear(ui.mList);
-    if (!rows.length) ui.mList.append(h("li", { class: "empty" },
-      state.filter === "done" ? "Nothing ticked off yet." : state.filter === "mine" ? "Nothing assigned to you here." : state.filter === "open" && inCat.length ? "All clear. Every mission here is done." : "No missions here yet. Add one above."));
-    rows.forEach(function (m) { ui.mList.append(missionItem(m)); });
+    ui.mStatus.select(state.filter);
+    ui.mArea.value = state.cat;
+
+    var open = inCat.filter(function (m) { return !m.done && (state.filter !== "mine" || m.owner === me); }).sort(missionSort);
+    var groups = state.filter === "done" ? [] : [
+      ["Overdue", open.filter(function (m) { return m.due && m.due < t; }), "late"],
+      ["Today", open.filter(function (m) { return m.due === t; })],
+      ["Next 7 days", open.filter(function (m) { return m.due && m.due > t && m.due <= week; })],
+      ["Later", open.filter(function (m) { return m.due && m.due > week; })],
+      ["No due date", open.filter(function (m) { return !m.due; })]];
+    if (state.filter === "done" || state.filter === "all") groups.push(["Done", inCat.filter(function (m) { return m.done; }).sort(missionSort), "fin"]);
+    groups = groups.filter(function (g) { return g[1].length; });
+
+    clear(ui.mBody);
+    if (!groups.length) ui.mBody.append(h("p", { class: "empty big" },
+      state.filter === "done" ? "Nothing ticked off yet." : state.filter === "mine" ? "Nothing is assigned to you. Enjoy it." :
+      inCat.length ? "All clear. Every mission here is done." : "No missions yet. Type one above and press Enter."));
+    groups.forEach(function (g) {
+      ui.mBody.append(h("section", { class: "m-group" + (g[2] ? " " + g[2] : "") },
+        h("h2", { class: "mono" }, g[0], h("span", null, g[1].length)),
+        h("ul", { class: "m-list" }, g[1].map(missionItem))));
+    });
   }
 
   /* ---------- car log ---------- */
