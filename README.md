@@ -2,15 +2,17 @@
 
 Private workspace for Team N!TRO. Members only.
 
-- **Chat:** replies, emoji reactions, @mentions, photos and files (up to 10 MB),
-  and an unread count in the browser tab.
-- **Calendar:** shared events you can edit, mission due dates shown on the
-  days, and export to Google or Apple Calendar (.ics file).
+- **Home:** countdown to the next competition, what is coming up, and your own missions.
+- **Chat:** replies, reactions, @mentions, photos and files, polls, pinned
+  messages, search, editing your own messages, "seen by", and phone notifications.
+- **Calendar:** shared events (one-off or repeating), mission due dates, and
+  export to Google or Apple Calendar.
 - **Missions:** shared checklist with categories, owners and due dates.
-- **Settings:** display name, password change, team list, sign out.
-- **Forgot password** link on the sign-in screen.
-- **Installable app:** add it to a phone home screen or computer. Settings has
-  the steps for each device.
+- **Car log:** test runs with track time, car version and parts, plus a chart.
+- **Budget:** money in and out with receipts.
+- **Files:** shared documents in folders, up to 25 MB each.
+- **Settings:** profile photo, display name, notifications, password, install.
+- **Installable app** on phones and computers.
 
 ## How it is kept private
 
@@ -41,6 +43,13 @@ Hiding the link is not what protects it. The login is.
 Each teammate can change their name and password from the account button
 after signing in.
 
+## Notifications
+
+Each person turns them on per device in Settings → Notifications. On iPhone and
+iPad the app has to be on the home screen first. The key pair used to send them
+is created automatically the first time someone turns notifications on and is
+stored in the `push_keys` table, readable by the team only.
+
 ## Demo mode
 
 While `config.js` is empty the app runs with sample data saved only in the
@@ -51,7 +60,9 @@ browser, so the screens can be tried before anything is connected.
 - `index.html`, `app.css`, `app.js`: the app
 - `config.js`: Supabase connection settings
 - `supabase/setup.sql`: tables, storage and privacy rules (everything)
-- `supabase/upgrade-1.sql`: the same additions for a project set up before them
+- `supabase/upgrade-1.sql`, `supabase/upgrade-2.sql`: the later additions, for a
+  project that was set up before them (run in order, each is safe to repeat)
+- `api/push.js`: the small function that sends phone notifications
 - `vendor/`: Supabase browser library (v2.119.0)
 - `manifest.webmanifest`, `sw.js`, `icons/`: what makes it installable
 - `vercel.json`: security headers

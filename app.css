@@ -80,7 +80,10 @@ label{display:block;margin:16px 0 6px;font-family:var(--fm);font-size:10.5px;let
 .acct{grid-area:acct;align-self:center;margin-right:16px;display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 14px 4px 4px;
   border:1px solid var(--line-2);border-radius:999px;background:transparent;font-size:14px}
 .acct:hover{border-color:var(--olo)}
-.acct b{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--laser);font-weight:800}
+.av{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;background:var(--laser);font-weight:800;font-style:normal;
+  font-family:var(--fd);font-size:15px;letter-spacing:0;text-transform:none;color:var(--ink);object-fit:cover}
+.av.xs{display:inline-grid;width:20px;height:20px;margin-right:7px;font-size:10px;vertical-align:-5px}
+.av.lg{width:72px;height:72px;font-size:30px}
 .acct span{max-width:9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tabs{grid-area:tabs;display:flex;border-top:1px solid var(--line-2);background:rgb(0 0 0 / .7);padding-bottom:env(safe-area-inset-bottom)}
 .tabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 4px 10px;border:0;background:transparent;
@@ -94,9 +97,15 @@ label{display:block;margin:16px 0 6px;font-family:var(--fm);font-size:10.5px;let
 .view{flex:1;min-height:0;display:flex;flex-direction:column;width:100%;max-width:1100px;margin-inline:auto;padding:18px 16px 0}
 .view-h{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:14px}
 .view-h h1{font-size:clamp(28px,5vw,40px);font-weight:900;letter-spacing:-.045em;line-height:1;font-variation-settings:"wdth" 108}
-.view.calendar,.view.missions{overflow-y:auto;padding-bottom:28px}
+.view.calendar,.view.missions,.view.home,.view.car,.view.budget,.view.files,.view.more{overflow-y:auto;padding-bottom:28px}
+.view.home > *,.view.car > *,.view.budget > *,.view.files > *,.view.more > *{flex-shrink:0}
 
+.tabs .extra{display:none}
+.dots-icon path{stroke-width:3.4}
 @media(min-width:860px){
+  .tabs .extra{display:flex}
+  .tabs .more-btn{display:none}
+  .tabs{overflow-y:auto}
   .shell{grid-template:"brand main" auto "tabs main" minmax(0,1fr) "acct main" auto / 232px minmax(0,1fr)}
   .brand{padding:26px 22px 22px}
   .tabs{flex-direction:column;gap:4px;padding:0 12px;border-top:0;background:none}
@@ -250,7 +259,6 @@ label.check input{width:20px;height:20px;min-height:0;padding:0;accent-color:var
 .steps li + li{margin-top:6px}
 .team-list li{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-2)}
 .team-list li:last-child{border:0}
-.team-list b{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;background:var(--laser);font-weight:800}
 .team-list span{flex:1;min-width:0;overflow-wrap:anywhere}
 .team-list i{font-style:normal;color:var(--olo)}
 
@@ -282,3 +290,94 @@ label.check input{width:20px;height:20px;min-height:0;padding:0;accent-color:var
 .toast.on{opacity:1;transform:translate(-50%,0)}
 
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* notices */
+.notice{padding:14px 16px;border:1px dashed var(--line);border-radius:14px;color:var(--mut);font-size:15px}
+.stack{display:grid;gap:8px}
+
+/* home */
+.count{display:flex;align-items:center;gap:clamp(16px,3vw,32px);flex-wrap:wrap;margin-bottom:16px;background:
+  radial-gradient(40rem 16rem at 0% 0%, rgb(34 52 116 / .55), transparent 70%),var(--glass);border-color:var(--line)}
+.count > div{flex:1;min-width:200px}
+.count .mono{color:var(--olo)}
+.count h2{margin-top:4px}
+.count-n{flex:none!important;min-width:0!important;display:flex;flex-direction:column;align-items:flex-start}
+.count-n b{font-size:clamp(56px,11vw,104px);font-weight:900;line-height:.9;letter-spacing:-.06em;font-variation-settings:"wdth" 112;color:var(--pink)}
+.count-n span{margin-top:8px;color:var(--mut)!important}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.stat{display:flex;flex-direction:column;gap:6px;padding:16px 18px;border:1px solid var(--line-2);border-radius:16px;background:var(--glass);text-align:left;color:var(--ink)}
+button.stat:hover{border-color:var(--olo)}
+.stat b{font-family:var(--fm);font-size:clamp(20px,2.6vw,28px);font-weight:700;line-height:1.1;overflow-wrap:anywhere}
+.stat span{font-size:9.5px;color:var(--mut)}
+.pos{color:var(--olo)}
+.neg{color:var(--pink)}
+.home .card .row{margin-top:12px}
+
+/* more (phones) */
+.more-list{display:grid;gap:10px}
+.more-list button{display:flex;align-items:center;gap:14px;min-height:64px;padding:0 18px;border:1px solid var(--line-2);border-radius:16px;background:var(--glass);
+  color:var(--ink);font-size:17px;font-weight:600;text-align:left}
+.more-list button:hover{border-color:var(--olo)}
+.more-list svg{width:22px;height:22px;fill:none;stroke:var(--olo);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.more-list span{flex:1}
+.more-list i{font-style:normal;color:var(--mut)}
+
+/* chat extras */
+.chat .view-h{align-items:center}
+.search-row{margin-bottom:10px}
+.seen{align-self:flex-end;margin:4px 4px 0;font-size:9px;letter-spacing:.1em;color:var(--mut)}
+.msg:not(.mine) .seen{align-self:flex-start}
+.edited{margin-left:8px;font-style:normal;font-size:9px;letter-spacing:.1em;color:var(--mut)}
+.pinned{color:var(--olo)}
+.poll{display:grid;gap:7px;min-width:min(260px,62vw)}
+.poll-q{font-weight:700;font-size:16px;line-height:1.3;margin-bottom:2px}
+.poll-opt{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:42px;padding:8px 12px;overflow:hidden;
+  border:1px solid var(--line-2);border-radius:12px;background:rgb(0 0 0 / .28);text-align:left}
+.poll-opt i{position:absolute;inset:0 auto 0 0;background:rgb(0 255 204 / .14);transition:width .4s var(--ease)}
+.poll-opt span,.poll-opt b{position:relative}
+.poll-opt b{font-family:var(--fm);font-size:12px;color:var(--mut)}
+.poll-opt:hover{border-color:var(--olo)}
+.poll-opt.on{border-color:var(--olo)}
+.poll-opt.on b{color:var(--olo)}
+.poll-n{font-size:9px}
+.composer .ibtn{width:44px;height:46px}
+
+/* car log, budget, files */
+.rec-form{display:grid;gap:10px;margin-bottom:18px;max-width:720px}
+.rec-form .btn{width:100%}
+.rec-list li{display:flex;gap:14px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line-2)}
+.rec-list li.empty{border:0}
+.rec-list li > div:not(.tools){flex:1;min-width:0}
+.rec-list strong{font-weight:600;overflow-wrap:anywhere}
+.rec-list p{font-size:14px;color:var(--mut);overflow-wrap:anywhere}
+.rec-list p.mono{margin-top:3px;font-size:9.5px}
+.rec-n{flex:none;min-width:86px;font-size:15px;letter-spacing:0;text-transform:none;font-weight:700}
+.rec-ic{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--glass);color:var(--olo)}
+.rec-ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+a.btn{display:inline-grid;place-items:center;text-decoration:none;color:var(--ink)}
+a.btn[aria-disabled]{opacity:.5;pointer-events:none}
+.chart{margin-bottom:18px}
+.chart svg{display:block;width:100%;height:auto;margin-top:10px}
+.chart .grid{stroke:var(--line-2);stroke-width:1}
+.chart .axis{fill:var(--mut);font-family:var(--fm);font-size:11.5px}
+.chart svg{max-height:340px}
+.chart .line{fill:none;stroke:var(--olo);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.chart .dot{fill:#000;stroke:var(--olo);stroke-width:2.5}
+.chart .dot.best{fill:var(--pink);stroke:var(--pink)}
+.chart p.mono{margin-top:8px;font-size:9.5px}
+.chart > p.dim:not(.mono){margin-top:8px}
+
+/* profile photo */
+.photo-row{display:flex;align-items:center;gap:16px;margin-top:14px}
+.photo-row .row{margin-top:0}
+
+/* narrow screens: give titles the full width and let dates and buttons wrap */
+@media(max-width:620px){
+  .ev-list li{flex-wrap:wrap;gap:4px 12px}
+  .ev-list li.empty{gap:0}
+  .ev-when{flex:1 0 100%;min-width:0;padding-top:0}
+  .rec-list li{flex-wrap:wrap;gap:6px 12px}
+  .rec-list li > div:not(.tools){flex:1 1 50%}
+  .rec-n{min-width:0}
+  .rec-list .tools{margin-left:auto}
+}
