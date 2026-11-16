@@ -8,10 +8,13 @@ Private workspace for Team N!TRO. Members only.
 - **Calendar:** shared events (one-off or repeating), mission due dates, and
   export to Google or Apple Calendar.
 - **Missions:** shared checklist with categories, owners and due dates.
-- **Car log:** test runs with track time, car version and parts, plus a chart.
-- **Budget:** money in and out with receipts.
+- **Car log:** test runs with track time, car version and parts, a chart, best
+  time per car version, and export to a spreadsheet (CSV).
+- **Budget:** money in and out with receipts, spending by category, and export
+  to a spreadsheet (CSV).
 - **Files:** shared documents in folders, up to 25 MB each.
-- **Settings:** profile photo, display name, notifications, password, install.
+- **Settings:** profile photo, display name, notifications, password, install,
+  and a downloadable backup of the team's records.
 - **Installable app** on phones and computers.
 
 ## How it is kept private

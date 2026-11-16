@@ -388,3 +388,22 @@ a.btn[aria-disabled]{opacity:.5;pointer-events:none}
   .rec-n{min-width:0}
   .rec-list .tools{margin-left:auto}
 }
+
+/* update helper, offline bar, drop target */
+.update{margin-bottom:16px;border-color:var(--pink);background:radial-gradient(36rem 14rem at 0% 0%, rgb(240 79 106 / .16), transparent 70%),var(--glass)}
+.update > .mono{color:var(--pink)}
+.update h2{margin-top:4px}
+.update .small{margin-top:12px}
+.msgs.drop{outline:2px dashed var(--olo);outline-offset:-6px;border-radius:16px}
+
+/* ranked bars: best by car version, spending by category */
+.versions{margin-bottom:18px}
+.bars{display:grid;gap:12px;margin-top:14px}
+.bars li{display:grid;grid-template-columns:minmax(110px,1fr) minmax(0,2fr) auto;gap:12px;align-items:center}
+.bars span{min-width:0;overflow-wrap:anywhere;font-weight:600}
+.bars em{display:block;margin-top:2px;font-style:normal;font-size:11px;color:var(--mut);font-weight:400}
+.bar{height:8px;border-radius:99px;background:var(--line-2);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--olo);transition:width .5s var(--ease)}
+.bars .top .bar i{background:var(--pink)}
+.bars b{font-size:13px;letter-spacing:0;text-transform:none}
+@media(max-width:620px){.bars li{grid-template-columns:minmax(0,1fr) auto}.bars .bar{grid-column:1 / -1;grid-row:2}}

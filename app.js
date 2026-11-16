@@ -178,6 +178,23 @@
     });
   }
 
+  function saveText(name, text, type) {
+    var blob = new Blob([text], { type: type });
+    var a = h("a", { href: URL.createObjectURL(blob), download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+  }
+  // spreadsheet-friendly: quoted where needed, and cells that look like formulas are defused
+  function csv(rows) {
+    return "\ufeff" + rows.map(function (r) {
+      return r.map(function (v) {
+        var t = v == null ? "" : String(v);
+        if (/^[=+\-@]/.test(t) && isNaN(Number(t))) t = "'" + t;
+        return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+      }).join(",");
+    }).join("\r\n") + "\r\n";
+  }
+
   /* private files are opened through short-lived links; fetch them in one go */
   function allPaths() {
     var out = [];
@@ -320,7 +337,10 @@
         if (!state.profiles.some(function (p) { return p.id === user.id; })) return askName();
         buildShell();
       });
-    }).catch(function (err) { state.user = null; showLogin((err && err.message) || "Could not load the workspace."); });
+    }).catch(function (err) {
+      state.user = null;
+      showLogin(navigator.onLine === false ? "You are offline. Connect to the internet and try again." : (err && err.message) || "Could not load the workspace.");
+    });
   }
   function leave() {
     if (stopWatching) { stopWatching(); stopWatching = null; }
@@ -408,7 +428,7 @@
       ui.acct, nav,
       h("main", { class: "main" },
         store.demo && h("p", { class: "demo-bar mono" }, "Demo mode · saved in this browser only"),
-        !store.demo && !upgraded() && h("p", { class: "demo-bar mono" }, "New sections need a database update · run supabase/upgrade-2.sql"),
+        (ui.netBar = h("p", { class: "demo-bar mono", role: "status", hidden: navigator.onLine !== false }, "You are offline · changes will not save until you reconnect")),
         TABS.map(function (t) { return ui.views[t[0]]; }), ui.views.more)));
     ["profiles", "messages", "push_subscriptions"].forEach(paint);
     go(state.tab);
@@ -417,7 +437,15 @@
     var wake = function () { if (!document.hidden && state.tab === "chat") markSeen(); };
     document.addEventListener("visibilitychange", wake);
     var urlTimer = setInterval(renewUrls, 45 * 60 * 1000);   // file links last an hour
-    stopWatching = function () { unwatch(); document.removeEventListener("visibilitychange", wake); clearInterval(urlTimer); };
+    var net = function () {
+      if (ui.netBar) ui.netBar.hidden = navigator.onLine !== false;
+      if (navigator.onLine !== false) TABLES.forEach(refresh);   // catch up on what was missed
+    };
+    window.addEventListener("online", net); window.addEventListener("offline", net);
+    stopWatching = function () {
+      unwatch(); document.removeEventListener("visibilitychange", wake); clearInterval(urlTimer);
+      window.removeEventListener("online", net); window.removeEventListener("offline", net);
+    };
   }
 
   function go(tab) {
@@ -444,7 +472,7 @@
     if (table === "events") { paintCalendar(); paintHome(); }
     if (table === "missions") { paintMissions(); paintCalendar(); paintHome(); }
     if (table === "runs") { paintCar(); paintHome(); }
-    if (table === "ledger") paintBudget();
+    if (table === "ledger") { paintBudget(); paintHome(); }
     if (table === "files") paintFiles();
     if (table === "settings") paintHome();
     if (table === "push_subscriptions") paintPush();
@@ -458,13 +486,14 @@
   function homeView() {
     ui.hello = h("h1");
     ui.count = h("div", { class: "card count" });
+    ui.homeUpdate = h("div", { class: "card update", hidden: true });
     ui.homeEvents = h("ul", { class: "ev-list" });
     ui.homeMissions = h("ul", { class: "m-list compact" });
     ui.homeStats = h("div", { class: "stat-row" });
     return h("section", { class: "view home", "aria-label": "Home", hidden: true },
       h("header", { class: "view-h" }, ui.hello,
         h("p", { class: "mono dim" }, new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }))),
-      ui.count, ui.homeStats,
+      ui.homeUpdate, ui.count, ui.homeStats,
       h("div", { class: "set-grid" },
         h("div", { class: "card" }, h("h2", null, "Next up"), ui.homeEvents,
           h("div", { class: "row" }, h("button", { class: "btn sm", type: "button", onclick: function () { go("calendar"); } }, "Open calendar"))),
@@ -484,6 +513,27 @@
         .then(function () { refresh("settings"); });
     });
   }
+  // shown until supabase/upgrade-2.sql has been run: three clicks for whoever holds the Supabase login
+  var updateSql = null;
+  function paintUpdate() {
+    var box = ui.homeUpdate;
+    box.hidden = store.demo || upgraded();
+    if (box.hidden || box.firstChild) return;
+    var ref = (cfg.url.match(/^https:\/\/([^.]+)\./) || [])[1];
+    var copy = h("button", { class: "btn primary", type: "button", disabled: true, onclick: function () {
+      navigator.clipboard.writeText(updateSql).then(function () { copy.textContent = "Copied ✓"; }, function () { toast("Could not copy. Open supabase/upgrade-2.sql in the repo instead."); });
+    } }, "1 · Copy the update");
+    fetch("/supabase/upgrade-2.sql").then(function (r) { if (!r.ok) throw 0; return r.text(); })
+      .then(function (t) { updateSql = t; copy.disabled = false; }).catch(function () {});
+    box.append(
+      h("p", { class: "mono" }, "One step left"),
+      h("h2", null, "Switch on the new sections"),
+      h("p", { class: "dim" }, "Car log, Budget, Files, polls, pins, photos and notifications need a one-time database update. Whoever set up Orbitus in Supabase can do it in under a minute."),
+      h("div", { class: "row" }, copy,
+        ref && h("a", { class: "btn", href: "https://supabase.com/dashboard/project/" + ref + "/sql/new", target: "_blank", rel: "noopener noreferrer" }, "2 · Open Supabase"),
+        h("button", { class: "btn", type: "button", onclick: function () { location.reload(); } }, "3 · Done, reload")),
+      h("p", { class: "dim small" }, "In Supabase: paste, press Run, and confirm if it warns you. It should say Success."));
+  }
   function stat(value, label, tab) {
     return h("button", { class: "stat", type: "button", onclick: function () { go(tab); } }, h("b", null, value), h("span", { class: "mono" }, label));
   }
@@ -491,12 +541,13 @@
     if (!ui.hello) return;
     var me = state.user.id, t = today();
     ui.hello.textContent = "Hi, " + nameOf(me);
+    paintUpdate();
 
     var c = setting("competition"), n = c && c.date ? daysUntil(c.date) : null;
     clear(ui.count);
-    if (n === null) ui.count.append(
+    if (n === null) add(ui.count, [
       h("div", null, h("p", { class: "mono" }, "Competition countdown"), h("p", { class: "dim" }, "Set the date of your next competition and the whole team sees the countdown here.")),
-      upgraded() && h("button", { class: "btn primary", type: "button", onclick: editCompetition }, "Set the date"));
+      upgraded() && h("button", { class: "btn primary", type: "button", onclick: editCompetition }, "Set the date")]);
     else ui.count.append(
       h("div", { class: "count-n" }, h("b", null, n > 1 ? n : n === 1 ? "1" : n === 0 ? "Today" : Math.abs(n)),
         n !== 0 && h("span", { class: "mono" }, n > 1 ? "days to go" : n === 1 ? "day to go" : n === -1 ? "day ago" : "days ago")),
@@ -510,6 +561,10 @@
       stat(unread, unread === 1 ? "new message" : "new messages", "chat"),
       stat(open, open === 1 ? "open mission" : "open missions", "missions"),
       stat(best === null ? "—" : best.toFixed(3) + "s", "best track time", "car"));
+    if (state.ledger.length) {
+      var left = state.ledger.reduce(function (sum, r) { return sum + (r.kind === "in" ? 1 : -1) * r.amount; }, 0);
+      ui.homeStats.append(stat((left < 0 ? "−" : "") + money(Math.abs(left)), "left to spend", "budget"));
+    }
 
     clear(ui.homeEvents);
     var next = upcoming(t, 120, 3);
@@ -674,6 +729,18 @@
         h("div", { class: "card" }, h("h2", null, "Team"), ui.team),
 
         h("div", { class: "card" },
+          h("h2", null, "Backup"),
+          h("p", { class: "dim" }, "Download a copy of the team's records: the latest messages, events, missions, car log, budget and the list of files. Uploaded files themselves are not included."),
+          h("div", { class: "row" }, h("button", { class: "btn", type: "button", onclick: function () {
+            var out = { app: "Orbitus", exported_at: new Date().toISOString(), exported_by: nameOf(state.user.id) };
+            ["profiles", "messages", "reactions", "poll_votes", "events", "missions", "runs", "ledger", "files", "settings"].forEach(function (t) {
+              out[t] = state[t].map(function (r) { var c = Object.assign({}, r); delete c.avatar_path; return c; });
+            });
+            saveText("orbitus-backup-" + today() + ".json", JSON.stringify(out, null, 2), "application/json");
+            toast("Backup downloaded. Keep it somewhere private.");
+          } }, icon("download"), "Download a backup"))),
+
+        h("div", { class: "card" },
           h("h2", null, "Sign out"),
           h("p", { class: "dim" }, "You will need your email and password to get back in."),
           h("div", { class: "row" }, h("button", { class: "btn danger", type: "button", onclick: function () {
@@ -764,10 +831,10 @@
       b.disabled = isInstalled();
     });
     if (!ui.install) return;
-    clear(ui.install).append(h("h2", null, "Get the app"),
+    add(clear(ui.install), [h("h2", null, "Get the app"),
       h("p", { class: "dim" }, isInstalled() ? "You are using the installed app." :
         "Install Orbitus so it opens from your home screen or desktop like any other app, with a badge for new messages."),
-      !isInstalled() && h("div", { class: "row" }, downloadButton()));
+      !isInstalled() && h("div", { class: "row" }, downloadButton())]);
   }
   function paintSettings() {
     if (!ui.team) return;
@@ -872,6 +939,22 @@
     var box = ui.box;
     function grow() { box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 140) + "px"; }
     box.addEventListener("input", function () { grow(); paintSuggest(); });
+    // paste a screenshot or drop a file straight into the chat
+    function attach(f) {
+      if (!f || state.editing) return;
+      if (f.size > MAX_FILE) { toast("Files can be up to 10 MB."); return; }
+      state.file = f; paintPending(); box.focus();
+    }
+    box.addEventListener("paste", function (e) {
+      var f = e.clipboardData && e.clipboardData.files && e.clipboardData.files[0];
+      if (f) { e.preventDefault(); attach(f); }
+    });
+    ui.msgs.addEventListener("dragover", function (e) { e.preventDefault(); ui.msgs.classList.add("drop"); });
+    ui.msgs.addEventListener("dragleave", function () { ui.msgs.classList.remove("drop"); });
+    ui.msgs.addEventListener("drop", function (e) {
+      e.preventDefault(); ui.msgs.classList.remove("drop");
+      attach(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+    });
     box.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && !ui.suggest.hidden) { ui.suggest.hidden = true; return; }
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
@@ -1374,7 +1457,7 @@
         store.add("missions", { user_id: state.user.id, title: t, owner: owner.value || null, category: cat.value || null, due: due.value || null })
           .then(function () { title.value = ""; due.value = ""; refresh("missions"); }).catch(fail);
       } }, title, cat, ui.ownerSlot, due, h("button", { class: "btn primary", type: "submit" }, "Add")),
-      h("div", { class: "chips", role: "group", "aria-label": "Show" }, [["open", "To do"], ["done", "Done"], ["all", "All"]].map(function (f) {
+      h("div", { class: "chips", role: "group", "aria-label": "Show" }, [["open", "To do"], ["mine", "Mine"], ["done", "Done"], ["all", "All"]].map(function (f) {
         return (ui.filters[f[0]] = h("button", { type: "button", class: "chip mono", onclick: function () { state.filter = f[0]; paintMissions(); } }, f[1]));
       })),
       h("div", { class: "chips scroll", role: "group", "aria-label": "Category" }, [["all", "All areas"]].concat(CATEGORIES.map(function (c) { return [c, c]; }), [["general", "General"]]).map(function (f) {
@@ -1429,10 +1512,13 @@
     ui.progBar.style.width = (inCat.length ? Math.round(done / inCat.length * 100) : 0) + "%";
     Object.keys(ui.filters).forEach(function (f) { ui.filters[f].setAttribute("aria-pressed", f === state.filter ? "true" : "false"); });
     Object.keys(ui.cats).forEach(function (f) { ui.cats[f].setAttribute("aria-pressed", f === state.cat ? "true" : "false"); });
-    var rows = inCat.filter(function (m) { return state.filter === "all" || (state.filter === "done") === m.done; }).sort(missionSort);
+    var rows = inCat.filter(function (m) {
+      if (state.filter === "mine") return !m.done && m.owner === state.user.id;
+      return state.filter === "all" || (state.filter === "done") === m.done;
+    }).sort(missionSort);
     clear(ui.mList);
     if (!rows.length) ui.mList.append(h("li", { class: "empty" },
-      state.filter === "done" ? "Nothing ticked off yet." : state.filter === "open" && inCat.length ? "All clear. Every mission here is done." : "No missions here yet. Add one above."));
+      state.filter === "done" ? "Nothing ticked off yet." : state.filter === "mine" ? "Nothing assigned to you here." : state.filter === "open" && inCat.length ? "All clear. Every mission here is done." : "No missions here yet. Add one above."));
     rows.forEach(function (m) { ui.mList.append(missionItem(m)); });
   }
 
@@ -1455,10 +1541,36 @@
         .then(function () { time.value = ""; note.value = ""; refresh("runs"); }).catch(fail);
     } }, h("div", { class: "pair" }, day, time), car, parts, note, h("button", { class: "btn primary", type: "submit" }, "Log this run"));
     return h("section", { class: "view car", "aria-label": "Car log", hidden: true },
-      h("header", { class: "view-h" }, h("h1", null, "Car log"), h("p", { class: "mono dim" }, "Private to the team")),
-      ui.carStats, ui.carChart, ui.carForm, ui.carList);
+      h("header", { class: "view-h" }, h("h1", null, "Car log"),
+        h("button", { class: "btn sm", type: "button", onclick: function () {
+          if (!state.runs.length) { toast("Nothing to export yet."); return; }
+          saveText("orbitus-car-log.csv", csv([["Date", "Track time (s)", "Car version", "Parts", "Note", "Logged by"]].concat(
+            state.runs.slice().sort(runSort).map(function (r) { return [r.day, (+r.time_s).toFixed(3), r.car, r.parts, r.note, nameOf(r.user_id)]; }))), "text/csv;charset=utf-8");
+        } }, icon("download"), "Export")),
+      ui.carStats, ui.carChart, (ui.carVersions = h("div", { class: "card versions", hidden: true })), ui.carForm, ui.carList);
   }
   function runSort(a, b) { return a.day.localeCompare(b.day) || a.id - b.id; }
+  function editRun(r) {
+    var day = h("input", { type: "date", id: "rDay", value: r.day });
+    var time = h("input", { type: "number", id: "rTime", step: "0.001", min: "0.001", max: "99", inputmode: "decimal", value: (+r.time_s).toFixed(3) });
+    var car = h("input", { type: "text", id: "rCar", maxlength: 60, value: r.car || null });
+    var parts = h("input", { type: "text", id: "rParts", maxlength: 500, value: r.parts || null });
+    var note = h("input", { type: "text", id: "rNote", maxlength: 500, value: r.note || null });
+    sheet("Edit run", [
+      h("div", { class: "pair" },
+        h("div", null, h("label", { for: "rDay" }, "Date"), day),
+        h("div", null, h("label", { for: "rTime" }, "Track time (s)"), time)),
+      h("label", { for: "rCar" }, "Car version"), car,
+      h("label", { for: "rParts" }, "Parts on the car"), parts,
+      h("label", { for: "rNote" }, "Note"), note
+    ], function () {
+      var t = parseFloat(time.value);
+      if (!day.value) return "Pick a date.";
+      if (!(t > 0 && t < 100)) return "Enter the track time in seconds, for example 1.234.";
+      return store.update("runs", r.id, { day: day.value, time_s: t, car: car.value.trim() || null, parts: parts.value.trim() || null, note: note.value.trim() || null })
+        .then(function () { refresh("runs"); });
+    });
+  }
   function lineChart(runs) {
     var W = window.innerWidth < 700 ? 360 : 720, H = 230, L = 50, R = 14, T = 16, B = 32;
     var times = runs.map(function (r) { return +r.time_s; });
@@ -1487,8 +1599,8 @@
     if (!ui.carList) return;
     var off = !!state.missing.runs;
     ui.carForm.hidden = off;
-    clear(ui.carStats); clear(ui.carChart); clear(ui.carList);
-    ui.carChart.hidden = off;
+    clear(ui.carStats); clear(ui.carChart); clear(ui.carList); clear(ui.carVersions);
+    ui.carChart.hidden = off; ui.carVersions.hidden = true;
     if (off) { ui.carList.append(h("li", { class: "empty" }, notice())); return; }
     var runs = state.runs.slice().sort(runSort), times = runs.map(function (r) { return +r.time_s; });
     if (runs.length) {
@@ -1501,15 +1613,35 @@
       ui.carChart.append(h("h2", null, "Track time by run"), lineChart(runs),
         h("p", { class: "mono dim" }, "Lower is faster · the pink dot is the best run"));
     } else ui.carChart.append(h("h2", null, "Track time by run"), h("p", { class: "dim" }, "Log your first test run below and the chart will start here."));
+    // best time for each car version, fastest first
+    var byCar = {};
+    runs.forEach(function (r) {
+      var k = r.car || "Unnamed";
+      byCar[k] = byCar[k] || { best: Infinity, n: 0 };
+      byCar[k].best = Math.min(byCar[k].best, +r.time_s); byCar[k].n++;
+    });
+    var cars = Object.keys(byCar).sort(function (a, b) { return byCar[a].best - byCar[b].best; });
+    if (cars.length > 1) {
+      ui.carVersions.hidden = false;
+      var slow = byCar[cars[cars.length - 1]].best, fast = byCar[cars[0]].best;
+      ui.carVersions.append(h("h2", null, "Best by car version"), h("ul", { class: "bars" }, cars.map(function (c, i) {
+        var bar = h("i");
+        bar.style.width = (slow === fast ? 100 : 100 - (byCar[c].best - fast) / (slow - fast) * 55) + "%";
+        return h("li", { class: i ? null : "top" }, h("span", null, c, h("em", { class: "mono" }, byCar[c].n + (byCar[c].n === 1 ? " run" : " runs"))),
+          h("div", { class: "bar" }, bar), h("b", { class: "mono" }, byCar[c].best.toFixed(3) + "s"));
+      })));
+    }
     if (!runs.length) ui.carList.append(h("li", { class: "empty" }, "No runs logged yet."));
     runs.slice().reverse().forEach(function (r) {
       ui.carList.append(h("li", null,
         h("span", { class: "rec-n mono" }, (+r.time_s).toFixed(3) + "s"),
         h("div", null, h("strong", null, r.car || "Test run"), r.parts && h("p", null, r.parts), r.note && h("p", null, r.note),
           h("p", { class: "mono dim" }, fmtDay(r.day) + " · logged by " + nameOf(r.user_id))),
-        h("button", { class: "x", type: "button", "aria-label": "Delete this run", onclick: function () {
-          store.remove("runs", r.id).then(function () { refresh("runs"); }).catch(fail);
-        } }, "×")));
+        h("div", { class: "tools" },
+          iconBtn("edit", "Edit this run", function () { editRun(r); }),
+          h("button", { class: "x", type: "button", "aria-label": "Delete this run", onclick: function () {
+            store.remove("runs", r.id).then(function () { refresh("runs"); }).catch(fail);
+          } }, "×"))));
     });
   }
 
@@ -1547,14 +1679,46 @@
       }).catch(fail).then(function () { add.disabled = false; });
     } }, h("div", { class: "pair" }, kind, amount), label, h("div", { class: "pair" }, day, cat), h("div", { class: "pair" }, pickBtn, add), pick);
     return h("section", { class: "view budget", "aria-label": "Budget", hidden: true },
-      h("header", { class: "view-h" }, h("h1", null, "Budget"), h("p", { class: "mono dim" }, "Private to the team")),
-      ui.budgetStats, ui.budgetForm, ui.budgetList);
+      h("header", { class: "view-h" }, h("h1", null, "Budget"),
+        h("button", { class: "btn sm", type: "button", onclick: function () {
+          if (!state.ledger.length) { toast("Nothing to export yet."); return; }
+          saveText("orbitus-budget.csv", csv([["Date", "In or out", "Amount (INR)", "What", "Category", "Added by", "Receipt"]].concat(
+            state.ledger.slice().sort(function (a, b) { return a.day.localeCompare(b.day) || a.id - b.id; }).map(function (r) {
+              return [r.day, r.kind === "in" ? "In" : "Out", (+r.amount).toFixed(2), r.label, r.category, nameOf(r.user_id), r.file_name || ""];
+            }))), "text/csv;charset=utf-8");
+        } }, icon("download"), "Export")),
+      ui.budgetStats, (ui.budgetCats = h("div", { class: "card versions", hidden: true })), ui.budgetForm, ui.budgetList);
+  }
+  function editEntry(r) {
+    var kind = h("select", { id: "lKind" }, h("option", { value: "out" }, "Money out"), h("option", { value: "in" }, "Money in"));
+    kind.value = r.kind;
+    var amount = h("input", { type: "number", id: "lAmount", step: "0.01", min: "0.01", inputmode: "decimal", value: (+r.amount).toFixed(2) });
+    var label = h("input", { type: "text", id: "lLabel", maxlength: 120, value: r.label });
+    var day = h("input", { type: "date", id: "lDay", value: r.day });
+    var cat = h("select", { id: "lCat" }, LEDGER_CATS.map(function (c) { return h("option", { value: c }, c); }));
+    cat.value = LEDGER_CATS.indexOf(r.category) >= 0 ? r.category : "Other";
+    sheet("Edit entry", [
+      h("div", { class: "pair" },
+        h("div", null, h("label", { for: "lKind" }, "In or out"), kind),
+        h("div", null, h("label", { for: "lAmount" }, "Amount (₹)"), amount)),
+      h("label", { for: "lLabel" }, "What was it for?"), label,
+      h("div", { class: "pair" },
+        h("div", null, h("label", { for: "lDay" }, "Date"), day),
+        h("div", null, h("label", { for: "lCat" }, "Category"), cat))
+    ], function () {
+      var a = parseFloat(amount.value);
+      if (!(a > 0)) return "Enter an amount.";
+      if (!label.value.trim()) return "Say what it was for.";
+      if (!day.value) return "Pick a date.";
+      return store.update("ledger", r.id, { kind: kind.value, amount: a, label: label.value.trim(), day: day.value, category: cat.value })
+        .then(function () { refresh("ledger"); });
+    });
   }
   function paintBudget() {
     if (!ui.budgetList) return;
     var off = !!state.missing.ledger;
     ui.budgetForm.hidden = off;
-    clear(ui.budgetStats); clear(ui.budgetList);
+    clear(ui.budgetStats); clear(ui.budgetList); clear(ui.budgetCats); ui.budgetCats.hidden = true;
     if (off) { ui.budgetList.append(h("li", { class: "empty" }, notice())); return; }
     var inSum = 0, outSum = 0;
     state.ledger.forEach(function (r) { if (r.kind === "in") inSum += +r.amount; else outSum += +r.amount; });
@@ -1563,6 +1727,19 @@
       h("div", { class: "stat" }, h("b", { class: "pos" }, money(inSum)), h("span", { class: "mono" }, "money in")),
       h("div", { class: "stat" }, h("b", { class: "neg" }, money(outSum)), h("span", { class: "mono" }, "money out")),
       h("div", { class: "stat" }, h("b", { class: left < 0 ? "neg" : null }, (left < 0 ? "−" : "") + money(Math.abs(left))), h("span", { class: "mono" }, "left to spend")));
+    // where the money went
+    var spent = {};
+    state.ledger.forEach(function (r) { if (r.kind === "out") spent[r.category || "Other"] = (spent[r.category || "Other"] || 0) + +r.amount; });
+    var cats = Object.keys(spent).sort(function (a, b) { return spent[b] - spent[a]; });
+    if (cats.length) {
+      ui.budgetCats.hidden = false;
+      ui.budgetCats.append(h("h2", null, "Where the money went"), h("ul", { class: "bars" }, cats.map(function (c) {
+        var bar = h("i");
+        bar.style.width = Math.max(3, spent[c] / spent[cats[0]] * 100) + "%";
+        return h("li", null, h("span", null, c, h("em", { class: "mono" }, Math.round(spent[c] / outSum * 100) + "%")),
+          h("div", { class: "bar" }, bar), h("b", { class: "mono" }, money(spent[c])));
+      })));
+    }
     var rows = state.ledger.slice().sort(function (a, b) { return b.day.localeCompare(a.day) || b.id - a.id; });
     if (!rows.length) ui.budgetList.append(h("li", { class: "empty" }, "Nothing recorded yet. Add sponsor money as “Money in” and each purchase as “Money out”."));
     rows.forEach(function (r) {
@@ -1572,6 +1749,7 @@
           h("p", { class: "mono dim" }, h("span", { class: "tag" }, r.category || "Other"), " · " + fmtDay(r.day) + " · " + nameOf(r.user_id))),
         h("div", { class: "tools" },
           r.file_path && fileLink(r.file_path, "Receipt"),
+          iconBtn("edit", "Edit " + r.label, function () { editEntry(r); }),
           h("button", { class: "x", type: "button", "aria-label": "Delete " + r.label, onclick: function () {
             store.remove("ledger", r.id).then(function () { removeStored(r.file_path); refresh("ledger"); }).catch(fail);
           } }, "×"))));
