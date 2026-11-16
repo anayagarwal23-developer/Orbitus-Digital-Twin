@@ -48,6 +48,8 @@
     month: startOfMonth(new Date()),
     day: ymd(new Date()),
     filter: "open",
+    kind: "all",
+    fileQ: "",
     cat: "all",
     folder: "all",
     openMsg: null,
@@ -422,6 +424,9 @@
     budget: "M4 7h16v12H4zM4 11h16M8 15h3",
     files: "M4 6h6l2 2h8v11H4z",
     settings: "M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M9 14.5v5",
+    up: "M12 19V6M6 11l6-6 6 6",
+    check: "M5 12.5l4.5 4.5L19 7.5",
+    plus: "M12 5v14M5 12h14",
     more: "M5 12h.01M12 12h.01M19 12h.01",
     clip: "M16.5 7.5l-7.8 7.8a2.1 2.1 0 0 0 3 3l8.1-8.1a4.2 4.2 0 0 0-6-6L5.6 12.4a6.3 6.3 0 0 0 8.9 8.9l6-6",
     edit: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
@@ -466,6 +471,10 @@
     ["profiles", "messages", "push_subscriptions"].forEach(paint);
     go(state.tab);
     if (stopWatching) stopWatching();
+    Object.keys(ui.views).forEach(function (k) {
+      var v = ui.views[k];
+      if (k !== "chat") v.addEventListener("scroll", function () { v.classList.toggle("scrolled", v.scrollTop > 28); }, { passive: true });
+    });
     var unwatch = store.watch(refresh);
     var wake = function () { if (!document.hidden && state.tab === "chat") markSeen(); };
     document.addEventListener("visibilitychange", wake);
@@ -526,7 +535,7 @@
     return h("section", { class: "view home", "aria-label": "Home", hidden: true },
       h("header", { class: "view-h" }, ui.hello,
         h("p", { class: "mono dim" }, new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }))),
-      ui.homeUpdate, ui.count, ui.homeStats,
+      ui.homeUpdate, ui.count, (ui.quick = h("div", { class: "quick" })), ui.homeStats,
       h("div", { class: "set-grid" },
         h("div", { class: "card" }, h("h2", null, "Next up"), ui.homeEvents,
           h("div", { class: "row" }, h("button", { class: "btn sm", type: "button", onclick: function () { go("calendar"); } }, "Open calendar"))),
@@ -573,7 +582,19 @@
   function paintHome() {
     if (!ui.hello) return;
     var me = state.user.id, t = today();
-    ui.hello.textContent = "Hi, " + nameOf(me);
+    var hour = new Date().getHours();
+    ui.hello.textContent = (hour < 5 ? "Up late" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening") + ", " + nameOf(me);
+    function shortcut(label, tab, field) {
+      return h("button", { type: "button", onclick: function () {
+        go(tab);
+        setTimeout(function () { var el = ui.views[tab].querySelector(field); if (el) el.focus(); }, 80);
+      } }, icon("plus"), label);
+    }
+    add(clear(ui.quick), [
+      shortcut("Mission", "missions", ".m-quick input"),
+      shortcut("Event", "calendar", ".ev-form input[type=text]"),
+      !state.missing.runs && shortcut("Test run", "car", ".rec-form input[type=number]"),
+      !state.missing.ledger && shortcut("Expense", "budget", ".rec-form input[type=number]")]);
     paintUpdate();
 
     var c = setting("competition"), n = c && c.date ? daysUntil(c.date) : null;
@@ -774,6 +795,15 @@
           } }, icon("download"), "Download a backup"))),
 
         h("div", { class: "card" },
+          h("h2", null, "Refresh"),
+          h("p", { class: "dim" }, "Orbitus updates itself. If something looks out of date, this loads the newest version."),
+          h("div", { class: "row" }, h("button", { class: "btn", type: "button", onclick: function () {
+            var reload = function () { location.reload(); };
+            if (!("serviceWorker" in navigator)) return reload();
+            navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).then(reload, reload);
+          } }, "Refresh Orbitus"))),
+
+        h("div", { class: "card" },
           h("h2", null, "Sign out"),
           h("p", { class: "dim" }, "You will need your email and password to get back in."),
           h("div", { class: "row" }, h("button", { class: "btn danger", type: "button", onclick: function () {
@@ -954,7 +984,7 @@
     ui.replyBar = h("div", { class: "pending", hidden: true });
     ui.fileBar = h("div", { class: "pending", hidden: true });
     ui.suggest = h("div", { class: "suggest", role: "listbox", "aria-label": "Mention someone", hidden: true });
-    ui.send = h("button", { class: "btn primary", type: "submit" }, "Send");
+    ui.send = h("button", { class: "send", type: "submit", "aria-label": "Send" }, icon("up"));
     ui.searchBox = h("input", { type: "search", placeholder: "Search messages", "aria-label": "Search messages", oninput: function () {
       state.search = ui.searchBox.value.trim(); paintChat();
     } });
@@ -972,7 +1002,12 @@
     var box = ui.box;
     function grow() { box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 140) + "px"; }
     ui.msgs.addEventListener("scroll", updateJump, { passive: true });
-    box.addEventListener("input", function () { grow(); paintSuggest(); });
+    box.addEventListener("input", function () {
+      grow(); paintSuggest();
+      // keep an unsent message if the app is closed by accident
+      if (!state.editing) try { localStorage.setItem(draftKey(), box.value); } catch (e) {}
+    });
+    try { box.value = localStorage.getItem(draftKey()) || ""; } catch (e) {}
     // paste a screenshot or drop a file straight into the chat
     function attach(f) {
       if (!f || state.editing) return;
@@ -1016,7 +1051,15 @@
           box, ui.send)));
   }
 
+  var lastTap = { id: 0, at: 0 };
+  function setSend(label) {
+    ui.send.setAttribute("aria-label", label);
+    ui.send.classList.toggle("busy", label === "Sending…");
+    clear(ui.send).append(icon(label === "Save" ? "check" : "up"));
+  }
+  function draftKey() { return "orbitus-draft-" + (state.user ? state.user.id : ""); }
   function afterSend(saved) {
+    try { localStorage.removeItem(draftKey()); } catch (e) {}
     ui.box.value = ""; ui.grow();
     state.file = null; state.replyTo = null; state.editing = null; paintPending();
     if (saved && saved.id) store.notify(saved.id);
@@ -1031,13 +1074,13 @@
     }
     if (!body && !file) return;
     ui.send.disabled = true;
-    if (file) ui.send.textContent = "Sending…";
+    if (file) setSend("Sending…");
     var up = file ? store.upload(state.user.id, file) : Promise.resolve(null);
     up.then(function (path) {
       var row = { user_id: state.user.id, body: body, reply_to: reply ? reply.id : null };
       if (path) { row.file_path = path; row.file_name = file.name.slice(0, 200); row.file_type = (file.type || "application/octet-stream").slice(0, 120); row.file_size = file.size; }
       return store.add("messages", row);
-    }).then(afterSend).catch(fail).then(function () { ui.send.disabled = false; ui.send.textContent = "Send"; });
+    }).then(afterSend).catch(fail).then(function () { ui.send.disabled = false; setSend(state.editing ? "Save" : "Send"); });
   }
 
   function openPoll() {
@@ -1092,7 +1135,7 @@
     if (f) ui.fileBar.append(
       h("div", null, h("p", { class: "mono" }, "Attached"), h("p", { class: "clip" }, f.name + " · " + fmtSize(f.size))),
       h("button", { class: "x", type: "button", "aria-label": "Remove attachment", onclick: function () { state.file = null; paintPending(); } }, "×"));
-    ui.send.textContent = ed ? "Save" : "Send";
+    setSend(ed ? "Save" : "Send");
   }
 
   function paintSuggest() {
@@ -1226,7 +1269,16 @@
         if (filtering) { jumpTo(m.id); return; }
         state.openMsg = open ? null : m.id; paintChat();
       };
-      bubble.addEventListener("click", toggle);
+      // a quick second tap on the same message loves it, as in Messages
+      bubble.addEventListener("click", function (e) {
+        var now = Date.now();
+        if (!filtering && !e.target.closest("a, .quote, .poll-opt") && lastTap.id === m.id && now - lastTap.at < 380) {
+          lastTap.at = 0; state.openMsg = null; paintChat(); toggleReaction(m, "❤️");
+          return;
+        }
+        lastTap = { id: m.id, at: now };
+        toggle(e);
+      });
       var more = h("button", { class: "msg-more", type: "button", "aria-expanded": open ? "true" : "false",
         "aria-label": filtering ? "Jump to this message" : "Reactions, reply and more for this message", onclick: toggle }, icon("more"));
 
@@ -1615,7 +1667,13 @@
       inCat.length ? "All clear. Every mission here is done." : "No missions yet. Type one above and press Enter."));
     groups.forEach(function (g) {
       ui.mBody.append(h("section", { class: "m-group" + (g[2] ? " " + g[2] : "") },
-        h("h2", { class: "mono" }, g[0], h("span", null, g[1].length)),
+        h("h2", { class: "mono" }, g[0], h("span", null, g[1].length),
+          g[2] === "fin" && h("button", { class: "clear-done", type: "button", onclick: function () {
+            confirmDelete(g[1].length === 1 ? "The 1 finished mission." : "All " + g[1].length + " finished missions.", function () {
+              Promise.all(g[1].map(function (m) { return store.remove("missions", m.id); }))
+                .then(function () { refresh("missions"); toast("Cleared."); }, function (err) { fail(err); refresh("missions"); });
+            });
+          } }, "Clear")),
         h("ul", { class: "m-list" }, g[1].map(missionItem))));
     });
   }
@@ -1787,7 +1845,9 @@
               return [r.day, r.kind === "in" ? "In" : "Out", (+r.amount).toFixed(2), r.label, r.category, nameOf(r.user_id), r.file_name || ""];
             }))), "text/csv;charset=utf-8");
         } }, icon("download"), "Export")),
-      ui.budgetStats, (ui.budgetCats = h("div", { class: "card versions", hidden: true })), ui.budgetForm, ui.budgetList);
+      ui.budgetStats, (ui.budgetCats = h("div", { class: "card versions", hidden: true })), ui.budgetForm,
+      (ui.kindSeg = segmented("Show", [["all", "All"], ["in", "Money in"], ["out", "Money out"]], function (v) { state.kind = v; paintBudget(); })),
+      ui.budgetList);
   }
   function editEntry(r) {
     var kind = h("select", { id: "lKind" }, h("option", { value: "out" }, "Money out"), h("option", { value: "in" }, "Money in"));
@@ -1840,7 +1900,9 @@
           h("div", { class: "bar" }, bar), h("b", { class: "mono" }, money(spent[c])));
       })));
     }
-    var rows = state.ledger.slice().sort(function (a, b) { return b.day.localeCompare(a.day) || b.id - a.id; });
+    ui.kindSeg.select(state.kind); ui.kindSeg.hidden = !state.ledger.length;
+    var rows = state.ledger.filter(function (r) { return state.kind === "all" || r.kind === state.kind; })
+      .sort(function (a, b) { return b.day.localeCompare(a.day) || b.id - a.id; });
     if (!rows.length) ui.budgetList.append(h("li", { class: "empty" }, "Nothing recorded yet. Add sponsor money as “Money in” and each purchase as “Money out”."));
     rows.forEach(function (r) {
       ui.budgetList.append(h("li", null,
@@ -1884,6 +1946,9 @@
     return h("section", { class: "view files", "aria-label": "Files", hidden: true },
       h("header", { class: "view-h" }, h("h1", null, "Files"), h("p", { class: "mono dim" }, "Up to 25 MB each")),
       ui.filesForm,
+      (ui.fileSearch = h("input", { type: "search", class: "file-search", placeholder: "Search files", "aria-label": "Search files", oninput: function () {
+        state.fileQ = ui.fileSearch.value.trim().toLowerCase(); paintFiles();
+      } })),
       h("div", { class: "chips scroll", role: "group", "aria-label": "Folder" }, [["all", "All"]].concat(FOLDERS.map(function (f) { return [f, f]; })).map(function (f) {
         return (ui.folders[f[0]] = h("button", { type: "button", class: "chip mono", onclick: function () { state.folder = f[0]; paintFiles(); } }, f[1]));
       })),
@@ -1896,7 +1961,7 @@
     clear(ui.fileList);
     if (off) { ui.fileList.append(h("li", { class: "empty" }, notice())); return; }
     Object.keys(ui.folders).forEach(function (f) { ui.folders[f].setAttribute("aria-pressed", f === state.folder ? "true" : "false"); });
-    var rows = state.files.filter(function (f) { return state.folder === "all" || f.folder === state.folder; })
+    var rows = state.files.filter(function (f) { return (state.folder === "all" || f.folder === state.folder) && (!state.fileQ || f.name.toLowerCase().indexOf(state.fileQ) >= 0); })
       .sort(function (a, b) { return b.id - a.id; });
     if (!rows.length) ui.fileList.append(h("li", { class: "empty" }, state.files.length ? "Nothing in this folder." : "No files yet. Upload the portfolio, sketches or documents so they are all in one place."));
     rows.forEach(function (f) {
