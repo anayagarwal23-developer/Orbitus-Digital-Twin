@@ -107,7 +107,13 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.classList.remove("on"); }, 3200);
   }
-  function fail(err) { toast((err && err.message) || "Something went wrong. Try again."); }
+  // turn a thrown error into words a person can act on
+  function explain(err, fallback) {
+    var m = (err && err.message) || "";
+    if (navigator.onLine === false || /failed to fetch|networkerror|load failed|network request failed/i.test(m)) return "No connection. Check your internet and try again.";
+    return m || fallback || "Something went wrong. Try again.";
+  }
+  function fail(err) { toast(explain(err)); }
   function seenKey() { return "orbitus-seen-" + (state.user ? state.user.id : ""); }
   function getSeen() { try { return +localStorage.getItem(seenKey()) || 0; } catch (e) { return 0; } }
   function setSeen(id) { try { localStorage.setItem(seenKey(), String(id)); } catch (e) {} }
@@ -259,7 +265,7 @@
       btn.disabled = true; btn.textContent = "Signing in…"; msg.textContent = "";
       store.signIn(email.value.trim(), pass.value).then(enter).catch(function (err) {
         btn.disabled = false; btn.textContent = "Sign in";
-        msg.textContent = /invalid/i.test(err.message || "") ? "That email or password is not right." : (err.message || "Could not sign in.");
+        msg.textContent = /invalid/i.test(err.message || "") ? "That email or password is not right." : explain(err, "Could not sign in.");
       });
     } },
       wordmark(),
@@ -289,7 +295,7 @@
         say(msg, "If that email is on the team, a reset link is on its way. Check your spam folder too.", true);
       }, function (err) {
         btn.disabled = false;
-        say(msg, /rate|seconds/i.test(err.message || "") ? "Too many reset emails. Wait a few minutes and try again." : (err.message || "Could not send the email."));
+        say(msg, /rate|seconds/i.test(err.message || "") ? "Too many reset emails. Wait a few minutes and try again." : explain(err, "Could not send the email."));
       });
     } },
       wordmark(),
@@ -314,7 +320,7 @@
       btn.disabled = true; say(msg, "");
       store.setPassword(a).then(function () { return store.session(); }).then(function (user) {
         ui.recovery = false; tidyAddress(); toast("Password changed."); enter(user);
-      }, function (err) { btn.disabled = false; say(msg, err.message || "Could not save the password."); });
+      }, function (err) { btn.disabled = false; say(msg, explain(err, "Could not save the password.")); });
     } },
       wordmark(),
       h("h2", { class: "card-h" }, "Choose a new password"),
@@ -339,7 +345,7 @@
       });
     }).catch(function (err) {
       state.user = null;
-      showLogin(navigator.onLine === false ? "You are offline. Connect to the internet and try again." : (err && err.message) || "Could not load the workspace.");
+      showLogin(explain(err, "Could not load the workspace."));
     });
   }
   function leave() {
@@ -371,7 +377,7 @@
       var name = input.value.trim();
       if (!name) { msg.textContent = "Add a name."; return; }
       store.saveName(state.user.id, name).then(function () { return load("profiles"); }).then(buildShell)
-        .catch(function (err) { msg.textContent = err.message || "Could not save."; });
+        .catch(function (err) { msg.textContent = explain(err, "Could not save."); });
     } },
       wordmark(),
       h("label", { for: "nm" }, "What should the team call you?"), input,
@@ -595,7 +601,7 @@
       e.preventDefault();
       var r = onSave();
       if (typeof r === "string") { say(msg, r); return; }
-      r.then(close, function (err) { say(msg, err.message || "Could not save."); });
+      r.then(close, function (err) { say(msg, explain(err, "Could not save.")); });
     } },
       h("h2", null, title), body, msg,
       h("div", { class: "row" },
@@ -694,7 +700,7 @@
           var n = ui.setName.value.trim();
           if (!n) { say(nameMsg, "Name cannot be empty."); return; }
           store.saveName(state.user.id, n).then(function () { refresh("profiles"); say(nameMsg, "Name saved.", true); })
-            .catch(function (err) { say(nameMsg, err.message || "Could not save."); });
+            .catch(function (err) { say(nameMsg, explain(err, "Could not save.")); });
         } },
           h("h2", null, "Profile"),
           ui.photo, ui.photoPick,
@@ -720,7 +726,7 @@
             cur.value = pw.value = pw2.value = "";
             say(pwMsg, "Password changed.", true);
           }, function (err) {
-            say(pwMsg, /invalid/i.test(err.message || "") ? "The current password is not right." : (err.message || "Could not change the password."));
+            say(pwMsg, /invalid/i.test(err.message || "") ? "The current password is not right." : explain(err, "Could not change the password."));
           }).then(function () { pwBtn.disabled = false; });
         } },
           h("h2", null, "Password"), f.nodes,
@@ -903,7 +909,7 @@
           setPush(o[0]).then(function () {
             draw(o[0]); load("push_subscriptions");
             say(msg, o[0] === "off" ? "Notifications are off on this device." : "Notifications are on for this device.", true);
-          }, function (err) { say(msg, err.message || "Could not change notifications."); });
+          }, function (err) { say(msg, explain(err, "Could not change notifications.")); });
         } }, o[1]));
       });
     }
