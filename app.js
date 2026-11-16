@@ -456,7 +456,8 @@
       car: carView(), budget: budgetView(), files: filesView(), settings: settingsView(), more: moreView()
     };
     var nav = h("nav", { class: "tabs", "aria-label": "Sections" }, TABS.map(function (t, i) {
-      var dot = t[0] === "chat" ? (ui.unread = h("b", { class: "unread", hidden: true })) : null;
+      var dot = t[0] === "chat" ? (ui.unread = h("b", { class: "unread", hidden: true }))
+        : t[0] === "missions" ? (ui.overdue = h("b", { class: "unread", hidden: true })) : null;
       return (ui.tabs[t[0]] = h("button", { type: "button", class: i > 3 ? "extra" : null, onclick: function () { go(t[0]); } },
         icon(t[0]), h("span", null, t[1]), dot));
     }), (ui.moreBtn = h("button", { type: "button", class: "more-btn", onclick: function () { go("more"); } }, icon("more"), h("span", null, "More"))));
@@ -475,6 +476,18 @@
       var v = ui.views[k];
       if (k !== "chat") v.addEventListener("scroll", function () { v.classList.toggle("scrolled", v.scrollTop > 28); }, { passive: true });
     });
+    // on a keyboard: 1 to 8 switch sections, / jumps to the main box of the current one
+    var keys = function (e) {
+      if (e.metaKey || e.ctrlKey || e.altKey || document.querySelector("dialog[open]")) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      var n = "12345678".indexOf(e.key);
+      if (n >= 0) { e.preventDefault(); go(TABS[n][0]); return; }
+      if (e.key === "/") {
+        var field = ui.views[state.tab] && ui.views[state.tab].querySelector(".m-quick input, .composer textarea, .file-search, .ev-form input[type=text], .rec-form input[type=number]");
+        if (field) { e.preventDefault(); field.focus(); }
+      }
+    };
+    document.addEventListener("keydown", keys);
     var unwatch = store.watch(refresh);
     var wake = function () { if (!document.hidden && state.tab === "chat") markSeen(); };
     document.addEventListener("visibilitychange", wake);
@@ -486,6 +499,7 @@
     window.addEventListener("online", net); window.addEventListener("offline", net);
     stopWatching = function () {
       unwatch(); document.removeEventListener("visibilitychange", wake); clearInterval(urlTimer);
+      document.removeEventListener("keydown", keys);
       window.removeEventListener("online", net); window.removeEventListener("offline", net);
     };
   }
@@ -1300,6 +1314,10 @@
           h("button", { type: "button", class: "act mono", onclick: function () {
             state.replyTo = m; state.editing = null; state.openMsg = null; paintPending(); paintChat(); ui.box.focus();
           } }, "Reply"),
+          m.body && navigator.clipboard && h("button", { type: "button", class: "act mono", onclick: function () {
+            navigator.clipboard.writeText(m.body).then(function () { toast("Copied."); }, function () { toast("Could not copy."); });
+            state.openMsg = null; paintChat();
+          } }, "Copy"),
           upgraded() && h("button", { type: "button", class: "act mono", onclick: function () {
             store.update("messages", m.id, { pinned: !m.pinned, pinned_by: m.pinned ? null : me })
               .then(function () { state.openMsg = null; refresh("messages"); }).catch(fail);
@@ -1648,6 +1666,8 @@
     var done = inCat.filter(function (m) { return m.done; }).length;
     ui.progText.textContent = inCat.length ? done + " of " + inCat.length + " complete" : "Nothing yet";
     ui.progBar.style.width = (inCat.length ? Math.round(done / inCat.length * 100) : 0) + "%";
+    var late = state.missions.filter(function (m) { return !m.done && m.owner === me && m.due && m.due < t; }).length;
+    if (ui.overdue) { ui.overdue.hidden = !late; ui.overdue.setAttribute("aria-label", late + " of your missions overdue"); }
     ui.mStatus.select(state.filter);
     ui.mArea.value = state.cat;
 
@@ -1944,7 +1964,7 @@
     } });
     ui.filesForm = h("div", { class: "rec-form" }, h("div", { class: "pair" }, folder, btn), pick);
     return h("section", { class: "view files", "aria-label": "Files", hidden: true },
-      h("header", { class: "view-h" }, h("h1", null, "Files"), h("p", { class: "mono dim" }, "Up to 25 MB each")),
+      h("header", { class: "view-h" }, h("h1", null, "Files"), (ui.filesMeta = h("p", { class: "mono dim" }, "Up to 25 MB each"))),
       ui.filesForm,
       (ui.fileSearch = h("input", { type: "search", class: "file-search", placeholder: "Search files", "aria-label": "Search files", oninput: function () {
         state.fileQ = ui.fileSearch.value.trim().toLowerCase(); paintFiles();
@@ -1961,6 +1981,8 @@
     clear(ui.fileList);
     if (off) { ui.fileList.append(h("li", { class: "empty" }, notice())); return; }
     Object.keys(ui.folders).forEach(function (f) { ui.folders[f].setAttribute("aria-pressed", f === state.folder ? "true" : "false"); });
+    var total = state.files.reduce(function (sum, f) { return sum + (f.file_size || 0); }, 0);
+    ui.filesMeta.textContent = state.files.length ? state.files.length + (state.files.length === 1 ? " file · " : " files · ") + fmtSize(total) : "Up to 25 MB each";
     var rows = state.files.filter(function (f) { return (state.folder === "all" || f.folder === state.folder) && (!state.fileQ || f.name.toLowerCase().indexOf(state.fileQ) >= 0); })
       .sort(function (a, b) { return b.id - a.id; });
     if (!rows.length) ui.fileList.append(h("li", { class: "empty" }, state.files.length ? "Nothing in this folder." : "No files yet. Upload the portfolio, sketches or documents so they are all in one place."));
