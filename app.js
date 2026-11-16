@@ -184,6 +184,33 @@
     });
   }
 
+  // shared records are deleted for the whole team, so one stray tap should not be enough
+  function confirmDelete(what, run) {
+    var dlg = h("dialog", { class: "sheet confirm", role: "alertdialog", "aria-labelledby": "cfTitle", "aria-describedby": "cfText" });
+    function close() { dlg.close(); dlg.remove(); }
+    var cancel = h("button", { class: "btn", type: "button", onclick: close }, "Keep it");
+    dlg.append(h("h2", { id: "cfTitle" }, "Delete this?"),
+      h("p", { class: "dim", id: "cfText" }, what + " It will be removed for the whole team and cannot be brought back."),
+      h("div", { class: "row" },
+        h("button", { class: "btn danger solid", type: "button", onclick: function () { close(); run(); } }, "Delete"), cancel));
+    dlg.addEventListener("cancel", function () { dlg.remove(); });
+    document.body.append(dlg); dlg.showModal();
+    cancel.focus();
+  }
+  function viewPhoto(m) {
+    var url = state.urls[m.file_path];
+    if (!url) return;
+    var dlg = h("dialog", { class: "lightbox", "aria-label": m.file_name || "Photo" });
+    function close() { dlg.close(); dlg.remove(); }
+    dlg.append(h("img", { src: url, alt: m.file_name || "Photo" }),
+      h("div", { class: "row" },
+        h("span", { class: "mono dim clip" }, (m.file_name || "Photo") + " · " + nameOf(m.user_id)),
+        h("a", { class: "btn sm", href: url, target: "_blank", rel: "noopener noreferrer" }, "Open full size"),
+        h("button", { class: "btn sm primary", type: "button", onclick: close }, "Close")));
+    dlg.addEventListener("cancel", function () { dlg.remove(); });
+    dlg.addEventListener("click", function (e) { if (e.target === dlg) close(); });   // click outside the photo
+    document.body.append(dlg); dlg.showModal();
+  }
   function saveText(name, text, type) {
     var blob = new Blob([text], { type: type });
     var a = h("a", { href: URL.createObjectURL(blob), download: name });
@@ -944,6 +971,7 @@
     } });
     var box = ui.box;
     function grow() { box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 140) + "px"; }
+    ui.msgs.addEventListener("scroll", updateJump, { passive: true });
     box.addEventListener("input", function () { grow(); paintSuggest(); });
     // paste a screenshot or drop a file straight into the chat
     function attach(f) {
@@ -980,6 +1008,7 @@
       ui.searchRow,
       ui.msgs,
       h("div", { class: "composer-wrap" },
+        (ui.jump = h("button", { class: "jump mono", type: "button", hidden: true, onclick: function () { scrollChat(); updateJump(); } }, "Latest ↓")),
         ui.suggest, ui.replyBar, ui.fileBar,
         h("form", { class: "composer", onsubmit: function (e) { e.preventDefault(); send(); box.focus(); } },
           iconBtn("clip", "Attach a photo or file", function () { picker.click(); }), picker,
@@ -1213,8 +1242,9 @@
         })) : null,
         open && h("div", { class: "actions" },
           EMOJI.map(function (em) { return h("button", { type: "button", class: "pick", "aria-label": "React " + em, onclick: function () { state.openMsg = null; toggleReaction(m, em); } }, em); }),
-          m.file_path && state.urls[m.file_path] && h("a", { class: "act mono", href: state.urls[m.file_path], target: "_blank", rel: "noopener noreferrer" },
-            INLINE_IMAGES.test(m.file_type || "") ? "Open photo" : "Open file"),
+          m.file_path && state.urls[m.file_path] && (INLINE_IMAGES.test(m.file_type || "")
+            ? h("button", { type: "button", class: "act mono", onclick: function () { viewPhoto(m); } }, "View photo")
+            : h("a", { class: "act mono", href: state.urls[m.file_path], target: "_blank", rel: "noopener noreferrer" }, "Open file")),
           h("button", { type: "button", class: "act mono", onclick: function () {
             state.replyTo = m; state.editing = null; state.openMsg = null; paintPending(); paintChat(); ui.box.focus();
           } }, "Reply"),
@@ -1241,8 +1271,17 @@
     if (state.tab === "chat" && !document.hidden) markSeen();
     else markUnread();
     if (nearBottom && !filtering) scrollChat();
+    updateJump();
   }
   function scrollChat() { if (ui.msgs) ui.msgs.scrollTop = ui.msgs.scrollHeight; }
+  // a shortcut back to the newest message while reading older ones
+  function updateJump() {
+    if (!ui.jump) return;
+    var el = ui.msgs, away = el.scrollHeight - el.scrollTop - el.clientHeight > 220, last = lastMsgId();
+    if (!away) ui.bottomId = last;
+    ui.jump.hidden = !away || !!state.search || state.pinnedOnly;
+    ui.jump.textContent = last > (ui.bottomId || 0) ? "New messages ↓" : "Latest ↓";
+  }
   function lastMsgId() { return state.messages.length ? state.messages[state.messages.length - 1].id : 0; }
   function markSeen() {
     var last = lastMsgId(), me = state.user.id;
@@ -1393,7 +1432,9 @@
         iconBtn("edit", "Edit " + ev.title, function () { editEvent(ev); }),
         iconBtn("download", "Add " + ev.title + " to my calendar", function () { downloadIcs("orbitus-event.ics", [eventIcs(ev)]); }),
         h("button", { class: "x", type: "button", "aria-label": "Delete " + ev.title + (ev.repeat ? " and all its repeats" : ""), onclick: function () {
-          store.remove("events", ev.id).then(function () { refresh("events"); if (ev.repeat) toast("Removed every repeat of that event."); }).catch(fail);
+          confirmDelete(ev.repeat ? "“" + ev.title + "” and every repeat of it." : "“" + ev.title + "” on " + fmtDay(ev.day) + ".", function () {
+            store.remove("events", ev.id).then(function () { refresh("events"); }).catch(fail);
+          });
         } }, "×")));
   }
   function dueItem(m) {
@@ -1505,7 +1546,9 @@
       h("div", { class: "tools" },
         iconBtn("edit", "Edit " + m.title, function () { editMission(m); }),
         h("button", { class: "x", type: "button", "aria-label": "Delete " + m.title, onclick: function () {
-          store.remove("missions", m.id).then(function () { refresh("missions"); }).catch(fail);
+          confirmDelete("The mission “" + m.title + "”.", function () {
+            store.remove("missions", m.id).then(function () { refresh("missions"); }).catch(fail);
+          });
         } }, "×")));
   }
   function paintMissions() {
@@ -1646,7 +1689,9 @@
         h("div", { class: "tools" },
           iconBtn("edit", "Edit this run", function () { editRun(r); }),
           h("button", { class: "x", type: "button", "aria-label": "Delete this run", onclick: function () {
-            store.remove("runs", r.id).then(function () { refresh("runs"); }).catch(fail);
+            confirmDelete("The " + (+r.time_s).toFixed(3) + "s run from " + fmtDay(r.day) + ".", function () {
+              store.remove("runs", r.id).then(function () { refresh("runs"); }).catch(fail);
+            });
           } }, "×"))));
     });
   }
@@ -1757,7 +1802,9 @@
           r.file_path && fileLink(r.file_path, "Receipt"),
           iconBtn("edit", "Edit " + r.label, function () { editEntry(r); }),
           h("button", { class: "x", type: "button", "aria-label": "Delete " + r.label, onclick: function () {
-            store.remove("ledger", r.id).then(function () { removeStored(r.file_path); refresh("ledger"); }).catch(fail);
+            confirmDelete("“" + r.label + "” (" + money(r.amount) + ")" + (r.file_path ? " and its receipt." : "."), function () {
+              store.remove("ledger", r.id).then(function () { removeStored(r.file_path); refresh("ledger"); }).catch(fail);
+            });
           } }, "×"))));
     });
     fetchUrls();
@@ -1811,7 +1858,9 @@
         h("div", { class: "tools" },
           fileLink(f.file_path, "Open"),
           h("button", { class: "x", type: "button", "aria-label": "Delete " + f.name, onclick: function () {
-            store.remove("files", f.id).then(function () { removeStored(f.file_path); refresh("files"); }).catch(fail);
+            confirmDelete("The file “" + f.name + "”.", function () {
+              store.remove("files", f.id).then(function () { removeStored(f.file_path); refresh("files"); }).catch(fail);
+            });
           } }, "×"))));
     });
     fetchUrls();
