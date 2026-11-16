@@ -625,10 +625,17 @@
     var unread = state.messages.filter(function (m) { return m.id > getSeen() && m.user_id !== me; }).length;
     var open = state.missions.filter(function (m) { return !m.done; }).length;
     var best = state.runs.reduce(function (b, r) { return b === null || +r.time_s < b ? +r.time_s : b; }, null);
-    clear(ui.homeStats).append(
+    add(clear(ui.homeStats), [
       stat(unread, unread === 1 ? "new message" : "new messages", "chat"),
       stat(open, open === 1 ? "open mission" : "open missions", "missions"),
-      stat(best === null ? "—" : best.toFixed(3) + "s", "best track time", "car"));
+      (function () {
+        var late = state.missions.filter(function (m) { return !m.done && m.owner === me && m.due && m.due < t; }).length;
+        if (!late) return null;
+        var el = stat(late, "overdue for you", "missions");
+        el.classList.add("warn");
+        return el;
+      })(),
+      stat(best === null ? "—" : best.toFixed(3) + "s", "best track time", "car")]);
     if (state.ledger.length) {
       var left = state.ledger.reduce(function (sum, r) { return sum + (r.kind === "in" ? 1 : -1) * r.amount; }, 0);
       ui.homeStats.append(stat((left < 0 ? "−" : "") + money(Math.abs(left)), "left to spend", "budget"));
@@ -1277,7 +1284,7 @@
           quoted ? [h("b", null, nameOf(quoted.user_id)), " ", snippet(quoted)] : "Original message was deleted"),
         m.file_path && attachment(m),
         m.poll && pollCard(m),
-        m.body && h("div", { class: "text" }, richText(m.body, re, myName), m.edited_at && h("i", { class: "edited mono" }, "edited")));
+        m.body && h("div", { class: "text" + (/^(?:\p{Extended_Pictographic}[\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]*\s*){1,3}$/u.test(m.body) ? " jumbo" : "") }, richText(m.body, re, myName), m.edited_at && h("i", { class: "edited mono" }, "edited")));
       var toggle = function (e) {
         if (e.target.closest("a, .quote, .poll-opt")) return;
         if (filtering) { jumpTo(m.id); return; }
@@ -1298,7 +1305,7 @@
 
       var groups = reactionsFor(m.id), emojis = Object.keys(groups);
       var row = h("div", { id: "m-" + m.id, class: "msg" + (mine ? " mine" : "") + (joined ? " joined" : "") + (open ? " open" : "") + (!mine && mentionsMe(m, re, myName) ? " mention" : "") },
-        !joined && h("p", { class: "msg-h mono" }, !mine && avatar(m.user_id, "xs"), mine ? "You" : nameOf(m.user_id), " · ", fmtTime(d), m.pinned && h("span", { class: "pinned" }, " · 📌 pinned")),
+        !joined && h("p", { class: "msg-h mono" }, !mine && avatar(m.user_id, "xs"), mine ? "You" : nameOf(m.user_id), " · ", h("time", { datetime: m.created_at, title: d.toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" }) }, fmtTime(d)), m.pinned && h("span", { class: "pinned" }, " · 📌 pinned")),
         h("div", { class: "msg-row" }, bubble, more),
         emojis.length ? h("div", { class: "reacts" }, emojis.map(function (em) {
           var who = groups[em], minePick = who.indexOf(me) >= 0;
@@ -1600,7 +1607,13 @@
           h("div", { class: "m-opts" },
             h("div", null, h("label", { for: "newCat" }, "Area"), cat),
             h("div", null, h("label", { for: "newOwner" }, "Owner"), ui.ownerSlot),
-            h("div", null, h("label", { for: "newDue" }, "Due"), due)))),
+            h("div", null, h("label", { for: "newDue" }, "Due"), due,
+              h("div", { class: "due-quick" }, [["Today", 0], ["Tomorrow", 1], ["Next week", 7]].map(function (o) {
+                return h("button", { type: "button", onclick: function () {
+                  var d = new Date(); d.setDate(d.getDate() + o[1]);
+                  due.value = due.value === ymd(d) ? "" : ymd(d);
+                } }, o[0]);
+              })))))),
       h("div", { class: "m-bar" }, ui.mStatus, ui.mArea),
       ui.mBody);
   }
