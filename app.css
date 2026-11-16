@@ -407,3 +407,17 @@ a.btn[aria-disabled]{opacity:.5;pointer-events:none}
 .bars .top .bar i{background:var(--pink)}
 .bars b{font-size:13px;letter-spacing:0;text-transform:none}
 @media(max-width:620px){.bars li{grid-template-columns:minmax(0,1fr) auto}.bars .bar{grid-column:1 / -1;grid-row:2}}
+
+/* confirm, photo viewer, jump to latest */
+.confirm .dim{margin-top:8px}
+.confirm .row{margin-top:20px}
+.btn.danger.solid{background:var(--pink);border-color:var(--pink);color:#000;font-weight:700}
+.btn.danger.solid:hover{background:var(--vanilla);border-color:var(--vanilla);color:#000}
+.lightbox{width:min(980px,calc(100% - 24px));max-height:calc(100dvh - 24px);padding:12px;border:1px solid var(--line);border-radius:18px;background:#07090f;color:var(--ink)}
+.lightbox::backdrop{background:rgb(0 0 0 / .82);backdrop-filter:blur(4px)}
+.lightbox img{display:block;max-width:100%;max-height:calc(100dvh - 130px);margin:0 auto;border-radius:10px;object-fit:contain}
+.lightbox .row{margin-top:12px;flex-wrap:nowrap}
+.lightbox .clip{flex:1;min-width:0}
+.jump{position:absolute;right:0;bottom:calc(100% + 10px);z-index:4;min-height:38px;padding:0 14px;border:1px solid var(--line);border-radius:999px;
+  background:#07090f;color:var(--olo);box-shadow:0 8px 24px rgb(0 0 0 / .5)}
+.jump:hover{border-color:var(--olo)}
