@@ -227,7 +227,7 @@
   function card(kids) {
     return h("main", { class: "login" }, kids, h("p", { class: "mono dim" }, "Members only"));
   }
-  function wordmark() { return h("div", { class: "wordmark" }, "ORB", h("i", null, "!"), "TUS"); }
+  function wordmark() { return h("h1", { class: "wordmark", "aria-label": "Orbitus" }, "ORB", h("i", null, "!"), "TUS"); }
 
   /* ---------- login ---------- */
   function showLogin(note, presetEmail) {
@@ -404,7 +404,7 @@
     }), (ui.moreBtn = h("button", { type: "button", class: "more-btn", onclick: function () { go("more"); } }, icon("more"), h("span", null, "More"))));
     ui.acct = h("button", { class: "acct", type: "button", onclick: function () { go("settings"); }, "aria-label": "Settings" });
     clear(app).append(h("div", { class: "shell" },
-      h("div", { class: "brand" }, h("div", { class: "wordmark sm" }, "ORB", h("i", null, "!"), "TUS"), h("p", { class: "mono sub" }, "Digital twin")),
+      h("header", { class: "brand" }, h("div", { class: "wordmark sm" }, "ORB", h("i", null, "!"), "TUS"), h("p", { class: "mono sub" }, "Digital twin")),
       ui.acct, nav,
       h("main", { class: "main" },
         store.demo && h("p", { class: "demo-bar mono" }, "Demo mode · saved in this browser only"),
@@ -430,6 +430,7 @@
     });
     if (inMore) ui.moreBtn.setAttribute("aria-current", "page"); else ui.moreBtn.removeAttribute("aria-current");
     if (tab === "chat") { markSeen(); scrollChat(); }
+    if (tab === "home") paintHome();
   }
 
   function paint(table) {
@@ -1096,8 +1097,7 @@
       var joined = !filtering && prev && !m.reply_to && prev.user_id === m.user_id && d - new Date(prev.created_at) < 5 * 60 * 1000;
       var open = state.openMsg === m.id;
       var quoted = m.reply_to ? byId(state.messages, m.reply_to) : null;
-      var bubble = h("div", { class: "bubble", tabindex: "0", role: "button", "aria-expanded": open ? "true" : "false",
-        "aria-label": (mine ? "Your message" : "Message from " + nameOf(m.user_id)) + (filtering ? ". Press to jump to it." : ". Press for reactions and reply.") },
+      var bubble = h("div", { class: "bubble" },
         m.reply_to && h("button", { class: "quote", type: "button", onclick: function (e) { e.stopPropagation(); jumpTo(m.reply_to); } },
           quoted ? [h("b", null, nameOf(quoted.user_id)), " ", snippet(quoted)] : "Original message was deleted"),
         m.file_path && attachment(m),
@@ -1109,12 +1109,13 @@
         state.openMsg = open ? null : m.id; paintChat();
       };
       bubble.addEventListener("click", toggle);
-      bubble.addEventListener("keydown", function (e) { if (e.target === bubble && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(e); } });
+      var more = h("button", { class: "msg-more", type: "button", "aria-expanded": open ? "true" : "false",
+        "aria-label": filtering ? "Jump to this message" : "Reactions, reply and more for this message", onclick: toggle }, icon("more"));
 
       var groups = reactionsFor(m.id), emojis = Object.keys(groups);
       var row = h("div", { id: "m-" + m.id, class: "msg" + (mine ? " mine" : "") + (joined ? " joined" : "") + (open ? " open" : "") + (!mine && mentionsMe(m, re, myName) ? " mention" : "") },
         !joined && h("p", { class: "msg-h mono" }, !mine && avatar(m.user_id, "xs"), mine ? "You" : nameOf(m.user_id), " · ", fmtTime(d), m.pinned && h("span", { class: "pinned" }, " · 📌 pinned")),
-        bubble,
+        h("div", { class: "msg-row" }, bubble, more),
         emojis.length ? h("div", { class: "reacts" }, emojis.map(function (em) {
           var who = groups[em], minePick = who.indexOf(me) >= 0;
           return h("button", { type: "button", class: "react" + (minePick ? " on" : ""), "aria-pressed": minePick ? "true" : "false",
