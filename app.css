@@ -571,3 +571,12 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgb(0 255 204 / .12
 .view.home:not(.chat) > .view-h{flex-direction:column-reverse;align-items:flex-start;gap:6px}
 .home .view-h h1{font-size:clamp(26px,4.2vw,38px);line-height:1.05}
 .view.home.scrolled > .view-h p{display:none}
+
+/* quick due dates, big emoji, overdue stat */
+.due-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.due-quick button{min-height:32px;padding:0 11px;border:1px solid var(--line-2);border-radius:99px;background:transparent;color:var(--mut);font-size:13px;font-weight:600;transition:transform .14s var(--ease),border-color .2s,color .2s}
+.due-quick button:hover{border-color:var(--olo);color:var(--olo)}
+.due-quick button:active{transform:scale(.95)}
+.text.jumbo{font-size:44px;line-height:1.15}
+.stat.warn{border-color:rgb(240 79 106 / .55)}
+.stat.warn b{color:var(--pink)}
