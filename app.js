@@ -529,7 +529,7 @@
     if (table === "missions") { paintMissions(); paintCalendar(); paintHome(); }
     if (table === "runs") { paintCar(); paintHome(); }
     if (table === "ledger") { paintBudget(); paintHome(); }
-    if (table === "files") paintFiles();
+    if (table === "files") { paintFiles(); paintHome(); }
     if (table === "settings") paintHome();
     if (table === "push_subscriptions") paintPush();
   }
@@ -551,6 +551,7 @@
         h("p", { class: "mono dim" }, new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }))),
       ui.homeUpdate, ui.count, (ui.quick = h("div", { class: "quick" })), ui.homeStats,
       h("div", { class: "set-grid" },
+        (ui.activity = h("div", { class: "card activity" })),
         h("div", { class: "card" }, h("h2", null, "Next up"), ui.homeEvents,
           h("div", { class: "row" }, h("button", { class: "btn sm", type: "button", onclick: function () { go("calendar"); } }, "Open calendar"))),
         h("div", { class: "card" }, h("h2", null, "Your missions"), ui.homeMissions,
@@ -593,8 +594,33 @@
   function stat(value, label, tab) {
     return h("button", { class: "stat", type: "button", onclick: function () { go(tab); } }, h("b", null, value), h("span", { class: "mono" }, label));
   }
+  function ago(iso) {
+    var mins = Math.round((Date.now() - new Date(iso)) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + " min ago";
+    if (mins < 1440) return Math.round(mins / 60) + " h ago";
+    var days = Math.round(mins / 1440);
+    return days === 1 ? "yesterday" : days + " days ago";
+  }
+  // a short feed of what the team has done lately, newest first
+  function paintActivity() {
+    if (!ui.activity) return;
+    var me = state.user.id, items = [];
+    state.missions.forEach(function (m) { if (m.done && m.done_at) items.push({ at: m.done_at, who: m.done_by, text: "finished “" + m.title + "”", tab: "missions" }); });
+    state.runs.forEach(function (r) { if (r.created_at) items.push({ at: r.created_at, who: r.user_id, text: "logged a " + (+r.time_s).toFixed(3) + "s run" + (r.car ? " on " + r.car : ""), tab: "car" }); });
+    state.files.forEach(function (f) { items.push({ at: f.created_at, who: f.user_id, text: "uploaded " + f.name, tab: "files" }); });
+    state.events.forEach(function (e) { if (e.created_at) items.push({ at: e.created_at, who: e.user_id, text: "added “" + e.title + "” to the calendar", tab: "calendar" }); });
+    items = items.filter(function (x) { return x.at && x.who && x.who !== me && Date.now() - new Date(x.at) < 14 * 86400000; })
+      .sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 5);
+    ui.activity.hidden = !items.length;
+    add(clear(ui.activity), [h("h2", null, "Team activity"), h("ul", { class: "feed" }, items.map(function (x) {
+      return h("li", null, h("button", { type: "button", onclick: function () { go(x.tab); } },
+        avatar(x.who), h("span", null, h("b", null, nameOf(x.who)), " " + x.text), h("i", { class: "mono" }, ago(x.at))));
+    }))]);
+  }
   function paintHome() {
     if (!ui.hello) return;
+    paintActivity();
     var me = state.user.id, t = today();
     var hour = new Date().getHours();
     ui.hello.textContent = (hour < 5 ? "Up late" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening") + ", " + nameOf(me);

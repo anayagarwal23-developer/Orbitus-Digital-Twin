@@ -580,3 +580,12 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgb(0 255 204 / .12
 .text.jumbo{font-size:44px;line-height:1.15}
 .stat.warn{border-color:rgb(240 79 106 / .55)}
 .stat.warn b{color:var(--pink)}
+
+/* team activity */
+.activity{grid-column:1 / -1}
+.feed{display:grid;gap:2px;margin-top:10px}
+.feed button{display:flex;align-items:center;gap:12px;width:100%;padding:9px 6px;border:0;border-radius:12px;background:transparent;color:var(--ink);text-align:left;font-size:15px}
+.feed button:hover{background:rgb(255 255 225 / .04)}
+.feed span{flex:1;min-width:0;color:var(--mut);overflow-wrap:anywhere}
+.feed span b{color:var(--ink);font-weight:600}
+.feed i{flex:none;font-style:normal;font-size:11px;color:var(--mut)}
