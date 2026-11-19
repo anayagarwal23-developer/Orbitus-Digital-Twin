@@ -48,12 +48,9 @@ after signing in.
 
 ## If someone can't sign in
 
-The sign-in screen says what is wrong:
-
-- **"That email or password is not right"**: a typo, or a forgotten password. Use Forgot password.
-- **"This account hasn't been confirmed yet"** or **"Almost there … isn't on the team list"**:
-  run `supabase/fix-sign-in.sql` once in the SQL Editor. It puts every login on the team
-  list, confirms them, adds future logins automatically, and shows a status table.
+Run `supabase/fix-sign-in.sql` once in the SQL Editor. Because public sign-ups are
+off, it makes every account that exists part of the team, so nobody has to be
+added to a list by hand. It finishes with a table of every account.
 
 ## Notifications
 
@@ -76,6 +73,6 @@ browser, so the screens can be tried before anything is connected.
   project that was set up before them (run in order, each is safe to repeat)
 - `supabase/fix-sign-in.sql`: one-paste fix for sign-in problems (see above)
 - `api/push.js`: the small function that sends phone notifications
-- `vendor/`: Supabase browser library (v2.119.0)
+- `vendor/client-2.119.0.js`: database client library (supabase-js v2.119.0)
 - `manifest.webmanifest`, `sw.js`, `icons/`: what makes it installable
 - `vercel.json`: security headers

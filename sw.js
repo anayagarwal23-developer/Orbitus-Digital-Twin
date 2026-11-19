@@ -1,9 +1,9 @@
 /* Orbitus service worker: keeps the app's own files on the device so it
    opens like an app. Always tries the network first, so updates show up
    straight away; the saved copy is only used when there is no connection.
-   Team data (messages, events, files) comes from Supabase and is never saved here. */
-var CACHE = "orbitus-shell-v12";
-var SHELL = ["/", "/index.html", "/app.css", "/app.js", "/config.js", "/vendor/supabase-2.119.0.js",
+   Team data (messages, events, files) comes from the database and is never saved here. */
+var CACHE = "orbitus-shell-v13";
+var SHELL = ["/", "/index.html", "/app.css", "/app.js", "/config.js", "/vendor/client-2.119.0.js",
   "/favicon.svg", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png",
   "/fonts/archivo-latin.woff2", "/fonts/jetbrains-mono-latin.woff2"];
 
