@@ -596,3 +596,18 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgb(0 255 204 / .12
 .pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-height:34px;padding:0 10px;border:0;border-radius:10px;background:transparent;
   color:var(--olo);font-family:var(--fm);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .pw-eye:hover{background:rgb(0 255 204 / .1)}
+
+/* sign-in: who you are signing in as, and a nudge to create a password */
+.who{display:flex;align-items:center;gap:10px;margin-top:18px;padding:10px 12px;border:1px solid var(--line-2);border-radius:14px;background:rgb(0 0 0 / .3)}
+.who .clip{flex:1;min-width:0;font-size:15px;color:var(--ink)}
+.linkish.inline{display:inline-block;margin:0;padding:4px 6px}
+.linkish.hot{color:var(--vanilla);background:rgb(0 255 204 / .14);border-radius:999px;padding:10px 16px}
+
+/* team management */
+.team-list li{flex-wrap:wrap}
+.team-list li > span{display:flex;flex-direction:column}
+.team-email{margin-top:2px;font-size:11px;letter-spacing:.04em;text-transform:none;overflow-wrap:anywhere}
+.team-list i.adm{color:var(--pink)}
+.team-tools{display:flex;gap:8px;margin-left:auto}
+@media(max-width:620px){.team-tools{flex-basis:100%;justify-content:flex-end}}
+.removed-h{margin:18px 0 4px;color:var(--mut)}

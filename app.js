@@ -7,7 +7,7 @@
 
   var CORE = ["profiles", "messages", "events", "missions", "reactions"];
   // added by supabase/upgrade-2.sql; the app still opens if they are not there yet
-  var EXTRA = ["poll_votes", "reads", "runs", "ledger", "files", "settings", "push_subscriptions"];
+  var EXTRA = ["poll_votes", "reads", "runs", "ledger", "files", "settings", "push_subscriptions", "admins", "removed_members"];
   var TABLES = CORE.concat(EXTRA);
   var TABS = [["home", "Home"], ["chat", "Chat"], ["calendar", "Calendar"], ["missions", "Missions"],
     ["car", "Car log"], ["budget", "Budget"], ["files", "Files"], ["settings", "Settings"]];
@@ -43,7 +43,8 @@
     user: null,
     tab: TABS.some(function (t) { return t[0] === startTab; }) ? startTab : "home",
     profiles: [], messages: [], events: [], missions: [], reactions: [],
-    poll_votes: [], reads: [], runs: [], ledger: [], files: [], settings: [], push_subscriptions: [],
+    poll_votes: [], reads: [], runs: [], ledger: [], files: [], settings: [], push_subscriptions: [], admins: [], removed_members: [],
+    emails: [],
     missing: {},
     month: startOfMonth(new Date()),
     day: ymd(new Date()),
@@ -290,40 +291,80 @@
   }
   function wordmark() { return h("h1", { class: "wordmark", "aria-label": "Orbitus" }, "ORB", h("i", null, "!"), "TUS"); }
 
-  /* ---------- login ---------- */
+  /* ---------- login: email first, then password ---------- */
+  var EMAIL_KEY = "orbitus-email";
+  function rememberedEmail() { try { return localStorage.getItem(EMAIL_KEY) || ""; } catch (e) { return ""; } }
+  function rememberEmail(v) { try { localStorage.setItem(EMAIL_KEY, v); } catch (e) {} }
+  function pwField(id, auto, placeholder) {
+    var input = h("input", { type: "password", id: id, autocomplete: auto, required: true, placeholder: placeholder });
+    var wrap = h("div", { class: "pw-wrap" }, input, h("button", { class: "pw-eye", type: "button", "aria-label": "Show password", onclick: function (e) {
+      var show = input.type === "password";
+      input.type = show ? "text" : "password";
+      e.currentTarget.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      e.currentTarget.textContent = show ? "Hide" : "Show";
+    } }, "Show"));
+    return { input: input, wrap: wrap };
+  }
   function showLogin(note, presetEmail) {
     document.title = TITLE;
-    var email = h("input", { type: "email", id: "email", autocomplete: "username", autocapitalize: "off", autocorrect: "off", spellcheck: "false", required: true, placeholder: "you@example.com", value: presetEmail || null });
-    var pass = h("input", { type: "password", id: "pass", autocomplete: "current-password", required: true, placeholder: "Password" });
+    var email = h("input", { type: "email", id: "email", autocomplete: "username", autocapitalize: "off", autocorrect: "off", spellcheck: "false",
+      inputmode: "email", enterkeyhint: "next", required: true, placeholder: "you@example.com", value: presetEmail || rememberedEmail() || null });
     var msg = h("p", { class: "form-msg", role: "alert" }, note || "");
-    var btn = h("button", { class: "btn primary", type: "submit" }, "Sign in");
-    var form = h("form", { class: "login-card", novalidate: true, onsubmit: function (e) {
+    clear(app).append(card(h("form", { class: "login-card", novalidate: true, onsubmit: function (e) {
       e.preventDefault();
-      if (!email.value.trim() || !pass.value) { msg.textContent = "Enter your email and password."; return; }
-      btn.disabled = true; btn.textContent = "Signing in…"; msg.textContent = "";
-      store.signIn(normEmail(email.value), pass.value).then(enter).catch(function (err) {
-        btn.disabled = false; btn.textContent = "Sign in";
-        msg.textContent = signInProblem(err);
-      });
+      var v = normEmail(email.value);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { msg.textContent = "Enter your email address."; email.focus(); return; }
+      rememberEmail(v);
+      showPassword(v);
     } },
       wordmark(),
       h("p", { class: "mono sub" }, "Digital twin"),
       h("label", { for: "email" }, "Email"), email,
-      h("label", { for: "pass" }, "Password"),
-      h("div", { class: "pw-wrap" }, pass, h("button", { class: "pw-eye", type: "button", "aria-label": "Show password", onclick: function (e) {
-        var show = pass.type === "password";
-        pass.type = show ? "text" : "password";
-        e.currentTarget.setAttribute("aria-label", show ? "Hide password" : "Show password");
-        e.currentTarget.textContent = show ? "Hide" : "Show";
-      } }, "Show")),
-      btn,
-      h("button", { class: "linkish", type: "button", onclick: function () { showForgot(email.value.trim()); } }, "Forgot password?"),
+      h("button", { class: "btn primary", type: "submit" }, "Continue"),
       msg,
       !isInstalled() && h("div", { class: "dl-login" }, downloadButton("ghost")),
-      store.demo && h("p", { class: "demo-note" }, "Demo mode: not connected yet. Any email and password opens a sample workspace that is saved only in this browser.")
-    );
-    clear(app).append(card(form));
-    (presetEmail ? pass : email).focus();
+      store.demo && h("p", { class: "demo-note" }, "Demo mode: not connected yet. Any email and password opens a sample workspace that is saved only in this browser."))));
+    email.focus();
+  }
+  // step two: sign in, or set a password the first time if new accounts are allowed
+  function showPassword(email, note, creating) {
+    var msg = h("p", { class: "form-msg", role: "alert" }, note || "");
+    var first = pwField("pass", creating ? "new-password" : "current-password", creating ? "Choose a password (8 or more characters)" : "Password");
+    var again = creating ? pwField("pass2", "new-password", "Same password again") : null;
+    var btn = h("button", { class: "btn primary", type: "submit" }, creating ? "Create account" : "Sign in");
+    var newHere = h("button", { class: "linkish", type: "button", hidden: true, onclick: function () { showPassword(email, "", true); } }, "First time here? Create your password");
+    if (!creating) store.canSignUp().then(function (yes) { newHere.hidden = !yes; }, function () {});
+    function done(user) { rememberEmail(email); enter(user); }
+    clear(app).append(card(h("form", { class: "login-card", novalidate: true, onsubmit: function (e) {
+      e.preventDefault();
+      var p = first.input.value;
+      if (!p) { msg.textContent = "Enter your password."; first.input.focus(); return; }
+      if (creating) {
+        if (p.length < 8) { msg.textContent = "Use at least 8 characters."; first.input.focus(); return; }
+        if (p !== again.input.value) { msg.textContent = "The two passwords do not match."; again.input.focus(); return; }
+      }
+      btn.disabled = true; btn.textContent = creating ? "Creating…" : "Signing in…"; msg.textContent = "";
+      (creating ? store.signUp(email, p) : store.signIn(email, p)).then(function (user) {
+        if (user) return done(user);
+        // the account was made but has to be confirmed from the inbox first
+        showPassword(email, "Almost done: open the email we just sent you and tap the link, then come back and sign in.");
+      }, function (err) {
+        btn.disabled = false; btn.textContent = creating ? "Create account" : "Sign in";
+        var m = ((err && (err.code || err.error_code)) || "") + " " + ((err && err.message) || "");
+        if (creating && /already|registered|exists/i.test(m)) { showPassword(email, "There's already an account for this email. Sign in with its password, or use Forgot password."); return; }
+        msg.textContent = creating ? explain(err, "Could not create the account. Try again.") : signInProblem(err);
+        if (!creating && /invalid/i.test(m) && !newHere.hidden) newHere.classList.add("hot");
+      });
+    } },
+      wordmark(),
+      h("div", { class: "who" }, h("span", { class: "clip" }, email),
+        h("button", { class: "linkish inline", type: "button", onclick: function () { showLogin("", email); } }, "Change")),
+      h("label", { for: "pass" }, creating ? "New password" : "Password"), first.wrap,
+      creating && h("label", { for: "pass2" }, "Password again"), creating && again.wrap,
+      btn, msg,
+      creating ? h("button", { class: "linkish", type: "button", onclick: function () { showPassword(email); } }, "I already have a password")
+               : [newHere, h("button", { class: "linkish", type: "button", onclick: function () { showForgot(email); } }, "Forgot password?")])));
+    first.input.focus();
   }
 
   function showForgot(preset) {
@@ -347,7 +388,7 @@
       h("p", { class: "dim small" }, "We will email you a link to choose a new password."),
       h("label", { for: "fEmail" }, "Email"), email,
       btn, msg,
-      h("button", { class: "linkish", type: "button", onclick: function () { showLogin("", email.value.trim()); } }, "Back to sign in"))));
+      h("button", { class: "linkish", type: "button", onclick: function () { var v = normEmail(email.value); if (v) showPassword(v); else showLogin(); } }, "Back to sign in"))));
     email.focus();
   }
 
@@ -381,7 +422,7 @@
     clear(app).append(h("p", { class: "boot" }, "Loading…"));
     return retryOnce(store.isTeam).then(function (ok) {
       if (!ok) return notOnTeam(user);
-      return Promise.all(TABLES.map(function (t) { return retryOnce(function () { return load(t); }); })).then(function () {
+      return Promise.all(TABLES.map(function (t) { return retryOnce(function () { return load(t); }); })).then(loadEmails).then(function () {
         if (!state.profiles.some(function (p) { return p.id === user.id; })) return askName();
         buildShell();
       });
@@ -392,10 +433,10 @@
     var msg = h("p", { class: "form-msg", role: "status" });
     clear(app).append(card(h("div", { class: "login-card" },
       wordmark(),
-      h("h2", { class: "card-h" }, "Almost there"),
+      h("h2", { class: "card-h" }, "No access"),
       h("p", { class: "dim small" }, "You signed in as"),
       h("p", { class: "set-email" }, user.email),
-      h("p", { class: "dim small hint" }, "but this account isn't set up for Orbitus yet. Once it is, press Try again."),
+      h("p", { class: "dim small hint" }, "but this account doesn't have access to Orbitus. If you think that's a mistake, contact the team."),
       h("button", { class: "btn primary", type: "button", onclick: function () { say(msg, ""); enter(user); } }, "Try again"),
       h("button", { class: "linkish", type: "button", onclick: function () { state.user = null; store.signOut().then(function () { showLogin("", user.email); }); } }, "Use a different account"),
       msg)));
@@ -564,6 +605,7 @@
     if (table === "files") { paintFiles(); paintHome(); }
     if (table === "settings") paintHome();
     if (table === "push_subscriptions") paintPush();
+    if (table === "admins" || table === "removed_members") paintSettings();
   }
   function paintAccount() {
     if (!ui.acct) return;
@@ -724,7 +766,7 @@
   }
   function ownerSelect(id, value) {
     var s = h("select", { id: id, "aria-label": "Who owns it" }, h("option", { value: "" }, "Anyone"),
-      state.profiles.slice().sort(function (a, b) { return a.name.localeCompare(b.name); })
+      state.profiles.filter(function (p) { return !isRemoved(p.id); }).sort(function (a, b) { return a.name.localeCompare(b.name); })
         .map(function (p) { return h("option", { value: p.id }, p.name); }));
     s.value = value || "";
     return s;
@@ -836,7 +878,7 @@
           h("h2", null, "Password"), f.nodes,
           h("div", { class: "row" }, pwBtn), pwMsg),
 
-        h("div", { class: "card" }, h("h2", null, "Team"), ui.team),
+        h("div", { class: "card" }, h("h2", null, "Team"), (ui.teamNote = h("p", { class: "dim small hint", hidden: true })), ui.team, (ui.removedBox = h("div", { hidden: true }))),
 
         h("div", { class: "card" },
           h("h2", null, "Backup"),
@@ -967,11 +1009,61 @@
           var old = mine.avatar_path;
           store.update("profiles", me, { avatar_path: null }).then(function () { removeStored(old); refresh("profiles"); }).catch(fail);
         } }, "Remove")) : h("p", { class: "dim small" }, "Profile photos aren't switched on yet."));
-    clear(ui.team);
-    state.profiles.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (p) {
-      ui.team.append(h("li", null, avatar(p.id), h("span", null, p.name), p.id === me && h("i", { class: "mono" }, "You")));
-    });
+    paintTeam();
     fetchUrls();
+  }
+  /* ---------- team: admins can remove people who shouldn't be here ---------- */
+  function isAdminId(id) { return state.admins.some(function (a) { return a.user_id === id; }); }
+  function isRemoved(id) { return state.removed_members.some(function (r) { return r.user_id === id; }); }
+  function iAmAdmin() { return !!state.user && isAdminId(state.user.id); }
+  function teamAction(run, okText) {
+    run().then(function () {
+      toast(okText);
+      return Promise.all(["admins", "removed_members", "profiles"].map(load)).then(loadEmails);
+    }).then(function () { paintSettings(); paintChat(); paintOwners(); }).catch(fail);
+  }
+  function loadEmails() {
+    if (!iAmAdmin()) { state.emails = []; return Promise.resolve(); }
+    return store.memberEmails().then(function (rows) { state.emails = Array.isArray(rows) ? rows : []; }, function () { state.emails = []; });
+  }
+  function paintTeam() {
+    var me = state.user.id, admin = iAmAdmin();
+    // admins see every account (with email), everyone else sees the people with a name
+    var people = state.profiles.map(function (p) { return { id: p.id, name: p.name }; });
+    if (admin) state.emails.forEach(function (e) {
+      var known = people.filter(function (x) { return x.id === e.user_id; })[0];
+      if (known) known.email = e.email; else people.push({ id: e.user_id, name: null, email: e.email });
+    });
+    people = people.filter(function (p) { return !isRemoved(p.id); })
+      .sort(function (a, b) { return (a.name || a.email || "").localeCompare(b.name || b.email || ""); });
+    ui.teamNote.hidden = !admin;
+    ui.teamNote.textContent = "You're an admin. Remove anyone who shouldn't be here: they lose access straight away, and their messages stay.";
+    clear(ui.team);
+    people.forEach(function (p) {
+      var tags = [p.id === me && h("i", { class: "mono" }, "You"), isAdminId(p.id) && h("i", { class: "mono adm" }, "Admin")];
+      var tools = admin && p.id !== me ? h("div", { class: "team-tools" },
+        h("button", { class: "btn sm", type: "button", onclick: function () {
+          var on = !isAdminId(p.id);
+          teamAction(function () { return store.setAdmin(p.id, on); }, on ? (p.name || p.email) + " is now an admin." : (p.name || p.email) + " is no longer an admin.");
+        } }, isAdminId(p.id) ? "Remove admin" : "Make admin"),
+        !isAdminId(p.id) && h("button", { class: "btn sm danger", type: "button", onclick: function () {
+          confirmDelete((p.name || p.email) + (p.email && p.name ? " (" + p.email + ")" : "") + " from the team. They will lose access straight away; their messages stay.", function () {
+            teamAction(function () { return store.removeMember(p.id); }, "Removed " + (p.name || p.email) + ".");
+          });
+        } }, "Remove")) : null;
+      ui.team.append(h("li", null, avatar(p.id),
+        h("span", null, p.name || "No name yet", p.email && admin && h("small", { class: "mono dim team-email" }, p.email)),
+        tags, tools));
+    });
+    var removed = admin ? state.removed_members : [];
+    ui.removedBox.hidden = !removed.length;
+    add(clear(ui.removedBox), removed.length ? [h("h3", { class: "mono removed-h" }, "Removed"), h("ul", { class: "team-list" }, removed.map(function (r) {
+      return h("li", null, h("b", { class: "av" }, (r.name || r.email || "?").charAt(0).toUpperCase()),
+        h("span", null, r.name || r.email, r.name && r.email && h("small", { class: "mono dim team-email" }, r.email)),
+        h("div", { class: "team-tools" }, h("button", { class: "btn sm", type: "button", onclick: function () {
+          teamAction(function () { return store.restoreMember(r.user_id); }, "Let " + (r.name || r.email) + " back in.");
+        } }, "Let back in")));
+    }))] : []);
   }
 
   /* ---------- phone notifications ---------- */
@@ -2083,12 +2175,27 @@
       demo: false,
       session: function () { return sb.auth.getSession().then(function (r) { return pick(r.data.session && r.data.session.user); }); },
       signIn: function (email, password) { return sb.auth.signInWithPassword({ email: email, password: password }).then(function (r) { return pick(ok(r).user); }); },
+      signUp: function (email, password) {
+        return sb.auth.signUp({ email: email, password: password, options: { emailRedirectTo: location.origin + "/" } }).then(function (r) {
+          var d = ok(r);
+          if (d.user && Array.isArray(d.user.identities) && !d.user.identities.length) { var e = new Error("User already registered"); e.code = "user_already_exists"; throw e; }
+          return d.session ? pick(d.session.user) : null;
+        });
+      },
+      canSignUp: function () {
+        return fetch(cfg.url + "/auth/v1/settings", { headers: { apikey: cfg.anonKey } })
+          .then(function (r) { return r.json(); }).then(function (d) { return !d.disable_signup; });
+      },
       signOut: function () { return sb.auth.signOut().then(function () {}); },
       onAuth: function (cb) { sb.auth.onAuthStateChange(function (ev) { setTimeout(function () { cb(ev); }, 0); }); },
       resetPassword: function (email, redirectTo) { return sb.auth.resetPasswordForEmail(email, { redirectTo: redirectTo }).then(ok); },
       checkPassword: function (email, p) { return sb.auth.signInWithPassword({ email: email, password: p }).then(ok); },
       setPassword: function (p) { return sb.auth.updateUser({ password: p }).then(ok); },
       isTeam: function () { return sb.rpc("is_team").then(ok); },
+      memberEmails: function () { return sb.rpc("member_emails").then(ok); },
+      removeMember: function (id) { return sb.rpc("remove_member", { target: id }).then(ok); },
+      restoreMember: function (id) { return sb.rpc("restore_member", { target: id }).then(ok); },
+      setAdmin: function (id, make) { return sb.rpc("set_admin", { target: id, make: make }).then(ok); },
       list: function (t) {
         var q = sb.from(t).select("*");
         return (orders[t] ? orders[t](q) : q).then(function (r) { var d = ok(r); return t === "messages" ? d.reverse() : d; });
@@ -2120,7 +2227,7 @@
       notify: function (id) { push({ action: "notify", message_id: id }).catch(function () {}); },
       watch: function (cb) {
         var ch = sb.channel("orbitus");
-        TABLES.filter(function (t) { return t !== "push_subscriptions" && !state.missing[t]; })
+        TABLES.filter(function (t) { return ["push_subscriptions", "admins", "removed_members"].indexOf(t) < 0 && !state.missing[t]; })
           .forEach(function (t) { ch.on("postgres_changes", { event: "*", schema: "public", table: t }, function () { cb(t); }); });
         ch.subscribe();
         // catch up on anything missed while the tab was in the background
@@ -2132,7 +2239,7 @@
   }
 
   function demoStore() {
-    var KEY = "orbitus-demo-3", ME = "me", db;
+    var KEY = "orbitus-demo-4", ME = "me", db;
     function day(n) { var d = new Date(); d.setDate(d.getDate() + n); return ymd(d); }
     function ago(mins) { return new Date(Date.now() - mins * 60000).toISOString(); }
     function seed() {
@@ -2172,7 +2279,7 @@
           { id: 19, user_id: "c", day: day(-18), kind: "out", amount: 6200, label: "Balsa blocks and wheels", category: "Materials" },
           { id: 20, user_id: "b", day: day(-9), kind: "out", amount: 3500, label: "3D printing", category: "Manufacturing" }
         ],
-        files: [],
+        files: [], admins: [{ user_id: ME }, { user_id: "b" }], removed_members: [],
         settings: [{ key: "competition", value: { name: "Regional Finals", date: day(47) } }],
         push_subscriptions: []
       };
@@ -2191,12 +2298,27 @@
       demo: true,
       session: function () { return Promise.resolve(db.signedIn ? user() : null); },
       signIn: function (email) { db.signedIn = true; db.email = email; return done(user()); },
+      signUp: function (email) { db.signedIn = true; db.email = email; return done(user()); },
+      canSignUp: function () { return Promise.resolve(true); },
       signOut: function () { db.signedIn = false; return done(); },
       onAuth: function () {},
       resetPassword: function () { return Promise.resolve(); },
       checkPassword: function () { return Promise.resolve(); },
       setPassword: function () { return Promise.resolve(); },
       isTeam: function () { return Promise.resolve(true); },
+      memberEmails: function () {
+        return Promise.resolve(db.profiles.map(function (p) { return { user_id: p.id, email: p.id === ME ? db.email : p.name.toLowerCase() + "@example.com" }; }));
+      },
+      removeMember: function (id) {
+        var p = db.profiles.filter(function (x) { return x.id === id; })[0];
+        db.removed_members.push({ user_id: id, name: p && p.name, email: p ? p.name.toLowerCase() + "@example.com" : "" }); return done();
+      },
+      restoreMember: function (id) { db.removed_members = db.removed_members.filter(function (r) { return r.user_id !== id; }); return done(); },
+      setAdmin: function (id, make) {
+        db.admins = db.admins.filter(function (a) { return a.user_id !== id; });
+        if (make) db.admins.push({ user_id: id });
+        return done();
+      },
       list: function (t) { return Promise.resolve(JSON.parse(JSON.stringify(db[t] || []))); },
       add: function (t, row) {
         row.id = ++db.seq; row.created_at = new Date().toISOString();
