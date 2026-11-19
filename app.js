@@ -113,7 +113,7 @@
   // what went wrong when signing in, in words a teammate can act on
   function signInProblem(err) {
     var m = ((err && (err.code || err.error_code)) || "") + " " + ((err && err.message) || "");
-    if (/email_not_confirmed|not confirmed/i.test(m)) return "This account hasn't been confirmed yet. Ask whoever manages Orbitus to open Supabase → Authentication → Users and confirm it.";
+    if (/email_not_confirmed|not confirmed/i.test(m)) return "This account isn't active yet. Try again a little later.";
     if (/invalid_credentials|invalid login|invalid/i.test(m)) return "That email or password is not right. Check for typos, or use Forgot password below.";
     if (/rate|too many|429/i.test(m)) return "Too many attempts. Wait a minute, then try again.";
     return explain(err, "Could not sign in. Try again.");
@@ -163,7 +163,7 @@
   // true once supabase/upgrade-2.sql has been run
   function upgraded() { return !state.missing.settings; }
   function notice() {
-    return h("p", { class: "notice" }, "This section needs the latest database update. Run supabase/upgrade-2.sql in Supabase to switch it on.");
+    return h("p", { class: "notice" }, "This section isn't switched on yet.");
   }
   function b64ToBytes(s) {
     var b = atob((s + "===".slice((s.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
@@ -395,7 +395,7 @@
       h("h2", { class: "card-h" }, "Almost there"),
       h("p", { class: "dim small" }, "You signed in as"),
       h("p", { class: "set-email" }, user.email),
-      h("p", { class: "dim small hint" }, "but that email isn't on the Orbitus team list yet. Ask whoever manages Orbitus to add it in Supabase (Table Editor → team_members), then press Try again."),
+      h("p", { class: "dim small hint" }, "but this account isn't set up for Orbitus yet. Once it is, press Try again."),
       h("button", { class: "btn primary", type: "button", onclick: function () { say(msg, ""); enter(user); } }, "Try again"),
       h("button", { class: "linkish", type: "button", onclick: function () { state.user = null; store.signOut().then(function () { showLogin("", user.email); }); } }, "Use a different account"),
       msg)));
@@ -574,14 +574,13 @@
   function homeView() {
     ui.hello = h("h1");
     ui.count = h("div", { class: "card count" });
-    ui.homeUpdate = h("div", { class: "card update", hidden: true });
     ui.homeEvents = h("ul", { class: "ev-list" });
     ui.homeMissions = h("ul", { class: "m-list compact" });
     ui.homeStats = h("div", { class: "stat-row" });
     return h("section", { class: "view home", "aria-label": "Home", hidden: true },
       h("header", { class: "view-h" }, ui.hello,
         h("p", { class: "mono dim" }, new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }))),
-      ui.homeUpdate, ui.count, (ui.quick = h("div", { class: "quick" })), ui.homeStats,
+      ui.count, (ui.quick = h("div", { class: "quick" })), ui.homeStats,
       h("div", { class: "set-grid" },
         (ui.activity = h("div", { class: "card activity" })),
         h("div", { class: "card" }, h("h2", null, "Next up"), ui.homeEvents,
@@ -601,27 +600,6 @@
       return store.upsert("settings", { key: "competition", value: { name: name.value.trim(), date: date.value }, updated_at: new Date().toISOString() }, "key")
         .then(function () { refresh("settings"); });
     });
-  }
-  // shown until supabase/upgrade-2.sql has been run: three clicks for whoever holds the Supabase login
-  var updateSql = null;
-  function paintUpdate() {
-    var box = ui.homeUpdate;
-    box.hidden = store.demo || upgraded();
-    if (box.hidden || box.firstChild) return;
-    var ref = (cfg.url.match(/^https:\/\/([^.]+)\./) || [])[1];
-    var copy = h("button", { class: "btn primary", type: "button", disabled: true, onclick: function () {
-      navigator.clipboard.writeText(updateSql).then(function () { copy.textContent = "Copied ✓"; }, function () { toast("Could not copy. Open supabase/upgrade-2.sql in the repo instead."); });
-    } }, "1 · Copy the update");
-    fetch("/supabase/upgrade-2.sql").then(function (r) { if (!r.ok) throw 0; return r.text(); })
-      .then(function (t) { updateSql = t; copy.disabled = false; }).catch(function () {});
-    box.append(
-      h("p", { class: "mono" }, "One step left"),
-      h("h2", null, "Switch on the new sections"),
-      h("p", { class: "dim" }, "Car log, Budget, Files, polls, pins, photos and notifications need a one-time database update. Whoever set up Orbitus in Supabase can do it in under a minute."),
-      h("div", { class: "row" }, copy,
-        ref && h("a", { class: "btn", href: "https://supabase.com/dashboard/project/" + ref + "/sql/new", target: "_blank", rel: "noopener noreferrer" }, "2 · Open Supabase"),
-        h("button", { class: "btn", type: "button", onclick: function () { location.reload(); } }, "3 · Done, reload")),
-      h("p", { class: "dim small" }, "In Supabase: paste, press Run, and confirm if it warns you. It should say Success."));
   }
   function stat(value, label, tab) {
     return h("button", { class: "stat", type: "button", onclick: function () { go(tab); } }, h("b", null, value), h("span", { class: "mono" }, label));
@@ -667,7 +645,6 @@
       shortcut("Event", "calendar", ".ev-form input[type=text]"),
       !state.missing.runs && shortcut("Test run", "car", ".rec-form input[type=number]"),
       !state.missing.ledger && shortcut("Expense", "budget", ".rec-form input[type=number]")]);
-    paintUpdate();
 
     var c = setting("competition"), n = c && c.date ? daysUntil(c.date) : null;
     clear(ui.count);
@@ -989,7 +966,7 @@
         mine.avatar_path && h("button", { class: "btn sm danger", type: "button", onclick: function () {
           var old = mine.avatar_path;
           store.update("profiles", me, { avatar_path: null }).then(function () { removeStored(old); refresh("profiles"); }).catch(fail);
-        } }, "Remove")) : h("p", { class: "dim small" }, "Profile photos need the latest database update."));
+        } }, "Remove")) : h("p", { class: "dim small" }, "Profile photos aren't switched on yet."));
     clear(ui.team);
     state.profiles.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (p) {
       ui.team.append(h("li", null, avatar(p.id), h("span", null, p.name), p.id === me && h("i", { class: "mono" }, "You")));
@@ -1163,7 +1140,7 @@
   }
 
   function openPoll() {
-    if (!upgraded()) { toast("Polls need the latest database update."); return; }
+    if (!upgraded()) { toast("Polls aren't switched on yet."); return; }
     var q = h("input", { type: "text", id: "pq", maxlength: 140, placeholder: "e.g. Thursday or Friday?" });
     var opts = [0, 1, 2, 3].map(function (i) {
       return h("input", { type: "text", maxlength: 60, "aria-label": "Option " + (i + 1), placeholder: "Option " + (i + 1) + (i > 1 ? " (optional)" : "") });
