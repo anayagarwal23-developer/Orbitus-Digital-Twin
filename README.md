@@ -46,6 +46,15 @@ Hiding the link is not what protects it. The login is.
 Each teammate can change their name and password from the account button
 after signing in.
 
+## If someone can't sign in
+
+The sign-in screen says what is wrong:
+
+- **"That email or password is not right"**: a typo, or a forgotten password. Use Forgot password.
+- **"This account hasn't been confirmed yet"** or **"Almost there … isn't on the team list"**:
+  run `supabase/fix-sign-in.sql` once in the SQL Editor. It puts every login on the team
+  list, confirms them, adds future logins automatically, and shows a status table.
+
 ## Notifications
 
 Each person turns them on per device in Settings → Notifications. On iPhone and
@@ -65,6 +74,7 @@ browser, so the screens can be tried before anything is connected.
 - `supabase/setup.sql`: tables, storage and privacy rules (everything)
 - `supabase/upgrade-1.sql`, `supabase/upgrade-2.sql`: the later additions, for a
   project that was set up before them (run in order, each is safe to repeat)
+- `supabase/fix-sign-in.sql`: one-paste fix for sign-in problems (see above)
 - `api/push.js`: the small function that sends phone notifications
 - `vendor/`: Supabase browser library (v2.119.0)
 - `manifest.webmanifest`, `sw.js`, `icons/`: what makes it installable

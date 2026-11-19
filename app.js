@@ -109,6 +109,15 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.classList.remove("on"); }, 3200);
   }
+  function normEmail(v) { return String(v || "").replace(/\s+/g, "").toLowerCase(); }
+  // what went wrong when signing in, in words a teammate can act on
+  function signInProblem(err) {
+    var m = ((err && (err.code || err.error_code)) || "") + " " + ((err && err.message) || "");
+    if (/email_not_confirmed|not confirmed/i.test(m)) return "This account hasn't been confirmed yet. Ask whoever manages Orbitus to open Supabase → Authentication → Users and confirm it.";
+    if (/invalid_credentials|invalid login|invalid/i.test(m)) return "That email or password is not right. Check for typos, or use Forgot password below.";
+    if (/rate|too many|429/i.test(m)) return "Too many attempts. Wait a minute, then try again.";
+    return explain(err, "Could not sign in. Try again.");
+  }
   // turn a thrown error into words a person can act on
   function explain(err, fallback) {
     var m = (err && err.message) || "";
@@ -284,7 +293,7 @@
   /* ---------- login ---------- */
   function showLogin(note, presetEmail) {
     document.title = TITLE;
-    var email = h("input", { type: "email", id: "email", autocomplete: "username", required: true, placeholder: "you@example.com", value: presetEmail || null });
+    var email = h("input", { type: "email", id: "email", autocomplete: "username", autocapitalize: "off", autocorrect: "off", spellcheck: "false", required: true, placeholder: "you@example.com", value: presetEmail || null });
     var pass = h("input", { type: "password", id: "pass", autocomplete: "current-password", required: true, placeholder: "Password" });
     var msg = h("p", { class: "form-msg", role: "alert" }, note || "");
     var btn = h("button", { class: "btn primary", type: "submit" }, "Sign in");
@@ -292,15 +301,21 @@
       e.preventDefault();
       if (!email.value.trim() || !pass.value) { msg.textContent = "Enter your email and password."; return; }
       btn.disabled = true; btn.textContent = "Signing in…"; msg.textContent = "";
-      store.signIn(email.value.trim(), pass.value).then(enter).catch(function (err) {
+      store.signIn(normEmail(email.value), pass.value).then(enter).catch(function (err) {
         btn.disabled = false; btn.textContent = "Sign in";
-        msg.textContent = /invalid/i.test(err.message || "") ? "That email or password is not right." : explain(err, "Could not sign in.");
+        msg.textContent = signInProblem(err);
       });
     } },
       wordmark(),
       h("p", { class: "mono sub" }, "Digital twin"),
       h("label", { for: "email" }, "Email"), email,
-      h("label", { for: "pass" }, "Password"), pass,
+      h("label", { for: "pass" }, "Password"),
+      h("div", { class: "pw-wrap" }, pass, h("button", { class: "pw-eye", type: "button", "aria-label": "Show password", onclick: function (e) {
+        var show = pass.type === "password";
+        pass.type = show ? "text" : "password";
+        e.currentTarget.setAttribute("aria-label", show ? "Hide password" : "Show password");
+        e.currentTarget.textContent = show ? "Hide" : "Show";
+      } }, "Show")),
       btn,
       h("button", { class: "linkish", type: "button", onclick: function () { showForgot(email.value.trim()); } }, "Forgot password?"),
       msg,
@@ -320,7 +335,7 @@
       var v = email.value.trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { say(msg, "Enter the email you sign in with."); return; }
       btn.disabled = true; say(msg, "");
-      store.resetPassword(v, location.origin + location.pathname).then(function () {
+      store.resetPassword(normEmail(v), location.origin + location.pathname).then(function () {
         say(msg, "If that email is on the team, a reset link is on its way. Check your spam folder too.", true);
       }, function (err) {
         btn.disabled = false;
@@ -358,24 +373,41 @@
   }
 
   /* ---------- entering / leaving the workspace ---------- */
+  function retryOnce(fn) {
+    return fn().catch(function () { return new Promise(function (r) { setTimeout(r, 900); }).then(fn); });
+  }
   function enter(user) {
     state.user = user;
     clear(app).append(h("p", { class: "boot" }, "Loading…"));
-    return store.isTeam().then(function (ok) {
-      if (!ok) {
-        return store.signOut().then(function () {
-          state.user = null;
-          showLogin("This account is not on the team list.");
-        });
-      }
-      return Promise.all(TABLES.map(load)).then(function () {
+    return retryOnce(store.isTeam).then(function (ok) {
+      if (!ok) return notOnTeam(user);
+      return Promise.all(TABLES.map(function (t) { return retryOnce(function () { return load(t); }); })).then(function () {
         if (!state.profiles.some(function (p) { return p.id === user.id; })) return askName();
         buildShell();
       });
-    }).catch(function (err) {
-      state.user = null;
-      showLogin(explain(err, "Could not load the workspace."));
-    });
+    }).catch(function (err) { stuck(user, err); });
+  }
+  // signed in, but the email is not on the team list yet
+  function notOnTeam(user) {
+    var msg = h("p", { class: "form-msg", role: "status" });
+    clear(app).append(card(h("div", { class: "login-card" },
+      wordmark(),
+      h("h2", { class: "card-h" }, "Almost there"),
+      h("p", { class: "dim small" }, "You signed in as"),
+      h("p", { class: "set-email" }, user.email),
+      h("p", { class: "dim small hint" }, "but that email isn't on the Orbitus team list yet. Ask whoever manages Orbitus to add it in Supabase (Table Editor → team_members), then press Try again."),
+      h("button", { class: "btn primary", type: "button", onclick: function () { say(msg, ""); enter(user); } }, "Try again"),
+      h("button", { class: "linkish", type: "button", onclick: function () { state.user = null; store.signOut().then(function () { showLogin("", user.email); }); } }, "Use a different account"),
+      msg)));
+  }
+  // something failed after signing in: offer a retry instead of a dead end
+  function stuck(user, err) {
+    clear(app).append(card(h("div", { class: "login-card" },
+      wordmark(),
+      h("h2", { class: "card-h" }, "Couldn't open Orbitus"),
+      h("p", { class: "dim small hint" }, explain(err, "Something went wrong while loading.")),
+      h("button", { class: "btn primary", type: "button", onclick: function () { enter(user); } }, "Try again"),
+      h("button", { class: "linkish", type: "button", onclick: function () { state.user = null; store.signOut().then(function () { showLogin("", user.email); }); } }, "Sign out"))));
   }
   function leave() {
     if (stopWatching) { stopWatching(); stopWatching = null; }
@@ -2111,7 +2143,8 @@
       notify: function (id) { push({ action: "notify", message_id: id }).catch(function () {}); },
       watch: function (cb) {
         var ch = sb.channel("orbitus");
-        TABLES.forEach(function (t) { ch.on("postgres_changes", { event: "*", schema: "public", table: t }, function () { cb(t); }); });
+        TABLES.filter(function (t) { return t !== "push_subscriptions" && !state.missing[t]; })
+          .forEach(function (t) { ch.on("postgres_changes", { event: "*", schema: "public", table: t }, function () { cb(t); }); });
         ch.subscribe();
         // catch up on anything missed while the tab was in the background
         var wake = function () { if (!document.hidden) TABLES.forEach(cb); };
