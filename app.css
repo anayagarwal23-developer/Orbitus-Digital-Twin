@@ -589,3 +589,10 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgb(0 255 204 / .12
 .feed span{flex:1;min-width:0;color:var(--mut);overflow-wrap:anywhere}
 .feed span b{color:var(--ink);font-weight:600}
 .feed i{flex:none;font-style:normal;font-size:11px;color:var(--mut)}
+
+/* sign-in: show / hide password */
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:72px}
+.pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-height:34px;padding:0 10px;border:0;border-radius:10px;background:transparent;
+  color:var(--olo);font-family:var(--fm);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.pw-eye:hover{background:rgb(0 255 204 / .1)}
