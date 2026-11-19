@@ -56,8 +56,7 @@ One-time setup, in the project dashboard:
 2. Authentication → Sign In / Providers: switch **on** "Allow new users to sign up".
 3. Authentication → Sign In / Providers → Email: switch **off** "Confirm email".
 
-Anyone who signs up can then use Orbitus. Admins (Aryeh's account and the first
-account created, to start with) see every account with its email in
+Anyone who signs up can then use Orbitus. The admin (Anay, anayagarwal23@gmail.com) see every account with its email in
 Settings → Team and can remove anyone who shouldn't be there, let them back in,
 or make someone else an admin. A removed person loses access immediately; their
 messages stay.

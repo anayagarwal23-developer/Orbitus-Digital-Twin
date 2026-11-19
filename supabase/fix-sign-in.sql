@@ -5,7 +5,7 @@
 -- After this, anyone who signs up with their email can use Orbitus, and admins
 -- can remove anyone who shouldn't be there (Settings → Team in the app).
 -- Removing someone takes away their access straight away; their messages stay.
--- Admins to start with: Aryeh's account and the first account ever created.
+-- The admin is Anay (anayagarwal23@gmail.com). Anay can make others admins in the app.
 
 -- who has been removed, and who can remove people
 create table if not exists public.removed_members (
@@ -86,9 +86,11 @@ end $$;
 revoke all on function public.member_emails(), public.remove_member(uuid), public.restore_member(uuid), public.set_admin(uuid, boolean) from public, anon;
 grant execute on function public.is_team(), public.is_admin(), public.member_emails(), public.remove_member(uuid), public.restore_member(uuid), public.set_admin(uuid, boolean) to authenticated;
 
--- starting admins
-insert into public.admins (user_id) select id from auth.users where lower(email) = 'aryeh.vij@icloud.com' on conflict do nothing;
-insert into public.admins (user_id) select id from auth.users order by created_at limit 1 on conflict do nothing;
+-- the admin: Anay's account (if that email has no account, the first account created instead)
+insert into public.admins (user_id) select id from auth.users where lower(email) = 'anayagarwal23@gmail.com' on conflict do nothing;
+insert into public.admins (user_id)
+select id from auth.users where not exists (select 1 from public.admins) order by created_at limit 1
+on conflict do nothing;
 
 -- result: every account, whether it can sign in, and its role
 select u.email,
