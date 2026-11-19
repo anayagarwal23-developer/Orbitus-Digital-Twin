@@ -46,11 +46,21 @@ Hiding the link is not what protects it. The login is.
 Each teammate can change their name and password from the account button
 after signing in.
 
-## If someone can't sign in
+## Signing in and the team
 
-Run `supabase/fix-sign-in.sql` once in the SQL Editor. Because public sign-ups are
-off, it makes every account that exists part of the team, so nobody has to be
-added to a list by hand. It finishes with a table of every account.
+Sign-in asks for an email first, then a password. Someone new taps "First time
+here? Create your password" and is in straight away.
+
+One-time setup, in the project dashboard:
+1. Run `supabase/fix-sign-in.sql` in the SQL Editor.
+2. Authentication → Sign In / Providers: switch **on** "Allow new users to sign up".
+3. Authentication → Sign In / Providers → Email: switch **off** "Confirm email".
+
+Anyone who signs up can then use Orbitus. Admins (Aryeh's account and the first
+account created, to start with) see every account with its email in
+Settings → Team and can remove anyone who shouldn't be there, let them back in,
+or make someone else an admin. A removed person loses access immediately; their
+messages stay.
 
 ## Notifications
 
