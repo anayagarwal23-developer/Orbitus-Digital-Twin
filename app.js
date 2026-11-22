@@ -115,7 +115,7 @@
   function signInProblem(err) {
     var m = ((err && (err.code || err.error_code)) || "") + " " + ((err && err.message) || "");
     if (/email_not_confirmed|not confirmed/i.test(m)) return "This account isn't active yet. Try again a little later.";
-    if (/invalid_credentials|invalid login|invalid/i.test(m)) return "That email or password is not right. Check for typos, or use Forgot password below.";
+    if (/invalid_credentials|invalid login|invalid/i.test(m)) return "That email or password is not right. Check for typos. Forgotten it? Ask the team admin to reset it.";
     if (/rate|too many|429/i.test(m)) return "Too many attempts. Wait a minute, then try again.";
     return explain(err, "Could not sign in. Try again.");
   }
@@ -351,7 +351,7 @@
       }, function (err) {
         btn.disabled = false; btn.textContent = creating ? "Create account" : "Sign in";
         var m = ((err && (err.code || err.error_code)) || "") + " " + ((err && err.message) || "");
-        if (creating && /already|registered|exists/i.test(m)) { showPassword(email, "There's already an account for this email. Sign in with its password, or use Forgot password."); return; }
+        if (creating && /already|registered|exists/i.test(m)) { showPassword(email, "There's already an account for this email. Sign in with its password, or ask the team admin to reset it."); return; }
         msg.textContent = creating ? explain(err, "Could not create the account. Try again.") : signInProblem(err);
         if (!creating && /invalid/i.test(m) && !newHere.hidden) newHere.classList.add("hot");
       });
@@ -363,7 +363,7 @@
       creating && h("label", { for: "pass2" }, "Password again"), creating && again.wrap,
       btn, msg,
       creating ? h("button", { class: "linkish", type: "button", onclick: function () { showPassword(email); } }, "I already have a password")
-               : [newHere, h("button", { class: "linkish", type: "button", onclick: function () { showForgot(email); } }, "Forgot password?")])));
+               : newHere)));
     first.input.focus();
   }
 
