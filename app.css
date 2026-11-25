@@ -25,7 +25,7 @@ html,body{height:100%}
 body{margin:0;background:
   radial-gradient(60rem 40rem at -10% -10%, rgb(34 52 116 / .5), transparent 65%),
   radial-gradient(50rem 36rem at 110% 110%, rgb(240 79 106 / .09), transparent 70%),var(--bg);
-  background-attachment:fixed;color:var(--ink);font:400 16px/1.5 var(--fd);-webkit-font-smoothing:antialiased}
+  color:var(--ink);font:400 16px/1.5 var(--fd);-webkit-font-smoothing:antialiased}
 h1,h2,h3,p,ul{margin:0}
 ul{padding:0;list-style:none}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -611,3 +611,13 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgb(0 255 204 / .12
 .team-tools{display:flex;gap:8px;margin-left:auto}
 @media(max-width:620px){.team-tools{flex-basis:100%;justify-content:flex-end}}
 .removed-h{margin:18px 0 4px;color:var(--mut)}
+
+/* speed: phones skip the costly live blur and use solid surfaces instead */
+@media (pointer:coarse), (max-width:860px){
+  .toast,.jump,.actions,.suggest{-webkit-backdrop-filter:none;backdrop-filter:none;background:#0b0e16}
+  .view.scrolled > .view-h{-webkit-backdrop-filter:none;backdrop-filter:none;background:#05070d}
+  .login-card{-webkit-backdrop-filter:none;backdrop-filter:none}
+  .view:not([hidden]){animation:none}
+}
+.older{align-self:center;margin:8px 0 14px;min-height:36px;padding:0 16px;border:1px solid var(--line-2);border-radius:999px;background:transparent;color:var(--olo)}
+.older:hover{border-color:var(--olo)}
