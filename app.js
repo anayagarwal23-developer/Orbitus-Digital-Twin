@@ -65,6 +65,54 @@
   var ui = {};          // live references to the parts of the shell that re-render
   var stopWatching = null;
 
+  /* ---------- iPhone-style touches ---------- */
+  var calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // swipe a sheet down to put it away
+  (function () {
+    var dlg = null, y0 = 0, t0 = 0, dy = 0;
+    document.addEventListener("touchstart", function (e) {
+      var d = e.target.closest && e.target.closest("dialog.sheet[open]");
+      dlg = null;
+      if (!d || e.touches.length > 1 || d.scrollTop > 0 || e.target.closest("input, textarea, select, .chips")) return;
+      dlg = d; y0 = e.touches[0].clientY; t0 = Date.now(); dy = 0;
+      d.style.animation = "none";   // grab it even while it is still sliding in
+    }, { passive: true });
+    document.addEventListener("touchmove", function (e) {
+      if (!dlg) return;
+      dy = Math.max(0, e.touches[0].clientY - y0);
+      dlg.style.transition = "none"; dlg.style.transform = dy ? "translateY(" + dy + "px)" : "";
+    }, { passive: true });
+    document.addEventListener("touchend", function () {
+      if (!dlg) return;
+      var d = dlg, quick = dy / Math.max(1, Date.now() - t0) > 0.5;
+      dlg = null;
+      d.style.transition = "transform .3s cubic-bezier(.16,1,.3,1), opacity .2s";
+      if (dy > 110 || (quick && dy > 30)) {
+        d.style.transform = "translateY(" + (window.innerHeight * 0.6) + "px)"; d.style.opacity = "0";
+        setTimeout(function () { if (d.open) d.close(); d.remove(); }, 200);
+      } else d.style.transform = "";
+    });
+  })();
+  // the highlight in a segmented switch slides to the new choice
+  document.addEventListener("click", function (e) {
+    var b = !calm && e.target.closest && e.target.closest(".seg button");
+    if (!b) return;
+    var from = b.parentNode.querySelector("button[aria-pressed=true]");
+    if (!from || from === b) return;
+    var r0 = from.getBoundingClientRect(), rb = b.getBoundingClientRect(), cx = rb.left + rb.width / 2, cy = rb.top + rb.height / 2;
+    requestAnimationFrame(function () {
+      var hit = document.elementFromPoint(cx, cy), seg = hit && hit.closest(".seg"), to = seg && seg.querySelector("button[aria-pressed=true]");
+      if (!to || !to.animate) return;
+      var r1 = to.getBoundingClientRect(), rs = seg.getBoundingClientRect();
+      var thumb = h("span", { class: "seg-thumb", "aria-hidden": "true" });
+      thumb.style.left = (r1.left - rs.left - seg.clientLeft) + "px"; thumb.style.top = (r1.top - rs.top - seg.clientTop) + "px";
+      thumb.style.width = r1.width + "px"; thumb.style.height = r1.height + "px";
+      seg.classList.add("sliding"); seg.append(thumb);
+      thumb.animate([{ transform: "translateX(" + (r0.left - r1.left) + "px)", width: r0.width + "px" }, { transform: "none", width: r1.width + "px" }],
+        { duration: 320, easing: "cubic-bezier(.16,1,.3,1)" }).onfinish = function () { thumb.remove(); seg.classList.remove("sliding"); };
+    });
+  }, true);
+
   /* ---------- tiny helpers ---------- */
   function h(tag, attrs) {
     var el = document.createElement(tag), k, v;
@@ -105,6 +153,7 @@
   }
   function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
   var toastTimer;
+  function buzz() { try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) {} }
   function toast(msg) {
     var t = document.getElementById("toast");
     t.textContent = msg; t.classList.add("on");
@@ -538,7 +587,7 @@
     var nav = h("nav", { class: "tabs", "aria-label": "Sections" }, TABS.map(function (t, i) {
       var dot = t[0] === "chat" ? (ui.unread = h("b", { class: "unread", hidden: true }))
         : t[0] === "missions" ? (ui.overdue = h("b", { class: "unread", hidden: true })) : null;
-      return (ui.tabs[t[0]] = h("button", { type: "button", class: i > 3 ? "extra" : null, onclick: function () { go(t[0]); } },
+      return (ui.tabs[t[0]] = h("button", { type: "button", class: i > 3 ? "extra" : null, onclick: function () { if (state.tab === t[0]) toTop(t[0]); else go(t[0]); } },
         icon(t[0]), h("span", null, t[1]), dot));
     }), (ui.moreBtn = h("button", { type: "button", class: "more-btn", onclick: function () { go("more"); } }, icon("more"), h("span", null, "More"))));
     ui.acct = h("button", { class: "acct", type: "button", onclick: function () { go("settings"); }, "aria-label": "Settings" });
@@ -587,6 +636,10 @@
     };
   }
 
+  function toTop(tab) {
+    if (tab === "chat") { if (ui.msgs) ui.msgs.scrollTo({ top: ui.msgs.scrollHeight, behavior: "smooth" }); return; }
+    var v = ui.views[tab]; if (v) v.scrollTo({ top: 0, behavior: "smooth" });
+  }
   function go(tab) {
     state.tab = tab;
     Object.keys(ui.views).forEach(function (t) { ui.views[t].hidden = t !== tab; });
@@ -1246,6 +1299,7 @@
   }
   function send() {
     var body = ui.box.value.trim(), file = state.file, reply = state.replyTo, editing = state.editing;
+    if (body || file) buzz();
     if (editing) {
       if (!body) { toast("A message cannot be empty. Delete it instead."); return; }
       store.update("messages", editing.id, { body: body }).then(function () { afterSend(); }).catch(fail);
@@ -1394,7 +1448,7 @@
     // show it straight away; the saved list replaces this once the server answers
     state.reactions = mine ? before.filter(function (r) { return !(r.message_id === m.id && r.user_id === uid && r.emoji === emoji); })
       : before.concat([{ message_id: m.id, user_id: uid, emoji: emoji, created_at: new Date().toISOString() }]);
-    state.openMsg = null; paintChat();
+    state.openMsg = null; paintChat(); buzz();
     (mine ? store.unreact(m.id, uid, emoji) : store.react(m.id, uid, emoji))
       .then(function () { refresh("reactions"); }).catch(function (e) { state.reactions = before; paintChat(); fail(e); });
   }
@@ -1435,7 +1489,6 @@
     var hiddenOlder = 0;
     if (!filtering && list.length > state.chatLimit) { hiddenOlder = list.length - state.chatLimit; list = list.slice(-state.chatLimit); }
     clear(el);
-    el.classList.toggle("has-open", !!state.openMsg && !filtering);
     if (hiddenOlder) el.append(h("button", { class: "older mono", type: "button", onclick: function () {
       var h0 = el.scrollHeight; state.chatLimit += 150; paintChat(); el.scrollTop += el.scrollHeight - h0;
     } }, "Show " + Math.min(150, hiddenOlder) + " earlier messages"));
@@ -1486,24 +1539,24 @@
           h("div", { class: "picks" }, EMOJI.map(function (em) { return h("button", { type: "button", class: "pick", "aria-label": "React " + em, onclick: function () { state.openMsg = null; toggleReaction(m, em); } }, em); })),
           h("div", { class: "act-list" },
           m.file_path && state.urls[m.file_path] && (INLINE_IMAGES.test(m.file_type || "")
-            ? h("button", { type: "button", class: "act", onclick: function () { viewPhoto(m); } }, "View photo")
-            : h("a", { class: "act", href: state.urls[m.file_path], target: "_blank", rel: "noopener noreferrer" }, "Open file")),
-          h("button", { type: "button", class: "act", onclick: function () {
+            ? h("button", { type: "button", class: "act mono", onclick: function () { viewPhoto(m); } }, "View photo")
+            : h("a", { class: "act mono", href: state.urls[m.file_path], target: "_blank", rel: "noopener noreferrer" }, "Open file")),
+          h("button", { type: "button", class: "act mono", onclick: function () {
             state.replyTo = m; state.editing = null; state.openMsg = null; paintPending(); paintChat(); ui.box.focus();
           } }, "Reply"),
-          m.body && navigator.clipboard && h("button", { type: "button", class: "act", onclick: function () {
+          m.body && navigator.clipboard && h("button", { type: "button", class: "act mono", onclick: function () {
             navigator.clipboard.writeText(m.body).then(function () { toast("Copied."); }, function () { toast("Could not copy."); });
             state.openMsg = null; paintChat();
           } }, "Copy"),
-          upgraded() && h("button", { type: "button", class: "act", onclick: function () {
+          upgraded() && h("button", { type: "button", class: "act mono", onclick: function () {
             store.update("messages", m.id, { pinned: !m.pinned, pinned_by: m.pinned ? null : me })
               .then(function () { state.openMsg = null; refresh("messages"); }).catch(fail);
           } }, m.pinned ? "Unpin" : "Pin"),
-          upgraded() && mine && m.body && !m.poll && h("button", { type: "button", class: "act", onclick: function () {
+          upgraded() && mine && m.body && !m.poll && h("button", { type: "button", class: "act mono", onclick: function () {
             state.editing = m; state.replyTo = null; state.openMsg = null;
             ui.box.value = m.body; ui.grow(); paintPending(); paintChat(); ui.box.focus();
           } }, "Edit"),
-          mine && h("button", { type: "button", class: "act danger", onclick: function () {
+          mine && h("button", { type: "button", class: "act mono danger", onclick: function () {
             var path = m.file_path;
             store.remove("messages", m.id).then(function () {
               removeStored(path);
@@ -1826,7 +1879,7 @@
         if (li.classList.contains("ticking")) return;
         if (m.done) { toggleMission(m); return; }
         // let the tick land before the row moves to Done
-        li.classList.add("ticking"); btn.textContent = "✓"; btn.setAttribute("aria-checked", "true");
+        li.classList.add("ticking"); buzz(); btn.textContent = "✓"; btn.setAttribute("aria-checked", "true");
         try { if (navigator.vibrate) navigator.vibrate(8); } catch (err) {}
         setTimeout(function () { toggleMission(m); }, 420);
       } }, m.done ? "✓" : ""),
