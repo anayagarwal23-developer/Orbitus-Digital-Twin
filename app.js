@@ -49,6 +49,7 @@
     month: startOfMonth(new Date()),
     day: ymd(new Date()),
     filter: "open",
+    chatLimit: 150,
     kind: "all",
     fileQ: "",
     cat: "all",
@@ -466,9 +467,15 @@
       state[table] = []; state.missing[table] = true;
     });
   }
+  var refreshTimers = {};
   function refresh(table) {
-    if (!state.user) return;
-    load(table).then(function () { paint(table); }).catch(function () {});
+    if (!state.user || refreshTimers[table]) return;
+    refreshTimers[table] = setTimeout(function () {
+      refreshTimers[table] = 0;
+      if (!state.user) return;
+      var before = JSON.stringify(state[table]);
+      load(table).then(function () { if (JSON.stringify(state[table]) !== before) paint(table); }).catch(function () {});
+    }, 120);
   }
 
   function askName() {
@@ -542,7 +549,10 @@
         store.demo && h("p", { class: "demo-bar mono" }, "Demo mode · saved in this browser only"),
         (ui.netBar = h("p", { class: "demo-bar mono", role: "status", hidden: navigator.onLine !== false }, "You are offline · changes will not save until you reconnect")),
         TABS.map(function (t) { return ui.views[t[0]]; }), ui.views.more)));
-    ["profiles", "messages", "push_subscriptions"].forEach(paint);
+    dirty = {};
+    paintAccount(); markUnread(); overdueBadge();
+    Object.keys(PAINTERS).forEach(function (v) { if (v !== state.tab) dirty[v] = true; });
+    dirty[state.tab] = true;
     go(state.tab);
     if (stopWatching) stopWatching();
     Object.keys(ui.views).forEach(function (k) {
@@ -586,26 +596,40 @@
       else ui.tabs[t[0]].removeAttribute("aria-current");
     });
     if (inMore) ui.moreBtn.setAttribute("aria-current", "page"); else ui.moreBtn.removeAttribute("aria-current");
+    if (dirty[tab] && PAINTERS[tab]) { dirty[tab] = false; PAINTERS[tab](); }
+    else if (tab === "home") paintHome();
     if (tab === "chat") { markSeen(); scrollChat(); }
-    if (tab === "home") paintHome();
   }
 
+  // which screens show each kind of data
+  var AFFECTS = {
+    profiles: ["home", "chat", "calendar", "missions", "car", "budget", "files", "settings"],
+    messages: ["chat", "home"], reactions: ["chat"], poll_votes: ["chat"], reads: ["chat"],
+    events: ["calendar", "home"], missions: ["missions", "calendar", "home"], runs: ["car", "home"],
+    ledger: ["budget", "home"], files: ["files", "home"], settings: ["home"],
+    push_subscriptions: ["settings"], admins: ["settings"], removed_members: ["settings"]
+  };
+  var PAINTERS = {
+    home: function () { paintHome(); }, chat: function () { paintChat(); }, calendar: function () { paintCalendar(); },
+    missions: function () { paintOwners(); paintMissions(); }, car: function () { paintCar(); }, budget: function () { paintBudget(); },
+    files: function () { paintFiles(); }, settings: function () { paintSettings(); paintPush(); }
+  };
+  var dirty = {};
+  // redraw only the screen that's open; the others are redrawn when you open them
   function paint(table) {
     if (!ui.views) return;
-    if (table === "profiles") {
-      paintAccount(); paintChat(); paintCalendar(); paintMissions(); paintOwners(); paintSettings();
-      paintHome(); paintCar(); paintBudget(); paintFiles();
-    }
-    if (table === "messages" || table === "reactions" || table === "poll_votes" || table === "reads") paintChat();
-    if (table === "messages") paintHome();
-    if (table === "events") { paintCalendar(); paintHome(); }
-    if (table === "missions") { paintMissions(); paintCalendar(); paintHome(); }
-    if (table === "runs") { paintCar(); paintHome(); }
-    if (table === "ledger") { paintBudget(); paintHome(); }
-    if (table === "files") { paintFiles(); paintHome(); }
-    if (table === "settings") paintHome();
-    if (table === "push_subscriptions") paintPush();
-    if (table === "admins" || table === "removed_members") paintSettings();
+    if (table === "profiles") paintAccount();
+    if (table === "messages") markUnread();
+    if (table === "missions") overdueBadge();
+    (AFFECTS[table] || []).forEach(function (v) {
+      if (v === state.tab) PAINTERS[v](); else dirty[v] = true;
+    });
+  }
+  function overdueBadge() {
+    if (!ui.overdue || !state.user) return;
+    var me = state.user.id, t = today();
+    var late = state.missions.filter(function (m) { return !m.done && m.owner === me && m.due && m.due < t; }).length;
+    ui.overdue.hidden = !late; ui.overdue.setAttribute("aria-label", late + " of your missions overdue");
   }
   function paintAccount() {
     if (!ui.acct) return;
@@ -1150,6 +1174,13 @@
     var box = ui.box;
     function grow() { box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 140) + "px"; }
     ui.msgs.addEventListener("scroll", updateJump, { passive: true });
+    // tapping anywhere else, or Escape, closes an open message menu
+    ui.msgs.addEventListener("click", function (e) {
+      if (state.openMsg && !e.target.closest(".msg.open")) { e.stopPropagation(); state.openMsg = null; paintChat(); }
+    }, true);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && state.openMsg && state.tab === "chat") { state.openMsg = null; paintChat(); }
+    });
     box.addEventListener("input", function () {
       grow(); paintSuggest();
       // keep an unsent message if the app is closed by accident
@@ -1359,8 +1390,13 @@
   }
   function toggleReaction(m, emoji) {
     var mine = state.reactions.some(function (r) { return r.message_id === m.id && r.user_id === state.user.id && r.emoji === emoji; });
-    (mine ? store.unreact(m.id, state.user.id, emoji) : store.react(m.id, state.user.id, emoji))
-      .then(function () { refresh("reactions"); }).catch(fail);
+    var uid = state.user.id, before = state.reactions;
+    // show it straight away; the saved list replaces this once the server answers
+    state.reactions = mine ? before.filter(function (r) { return !(r.message_id === m.id && r.user_id === uid && r.emoji === emoji); })
+      : before.concat([{ message_id: m.id, user_id: uid, emoji: emoji, created_at: new Date().toISOString() }]);
+    state.openMsg = null; paintChat();
+    (mine ? store.unreact(m.id, uid, emoji) : store.react(m.id, uid, emoji))
+      .then(function () { refresh("reactions"); }).catch(function (e) { state.reactions = before; paintChat(); fail(e); });
   }
   // who has read up to which message: each teammate's marker sits on the last message they have seen
   function seenMap() {
@@ -1396,7 +1432,13 @@
       if (state.pinnedOnly && !m.pinned) return false;
       return !q || [m.body, m.file_name, m.poll && m.poll.q, nameOf(m.user_id)].join(" ").toLowerCase().indexOf(q) >= 0;
     });
+    var hiddenOlder = 0;
+    if (!filtering && list.length > state.chatLimit) { hiddenOlder = list.length - state.chatLimit; list = list.slice(-state.chatLimit); }
     clear(el);
+    el.classList.toggle("has-open", !!state.openMsg && !filtering);
+    if (hiddenOlder) el.append(h("button", { class: "older mono", type: "button", onclick: function () {
+      var h0 = el.scrollHeight; state.chatLimit += 150; paintChat(); el.scrollTop += el.scrollHeight - h0;
+    } }, "Show " + Math.min(150, hiddenOlder) + " earlier messages"));
     if (filtering) el.append(h("p", { class: "daysep mono" }, list.length + (list.length === 1 ? " message" : " messages") + " · tap one to jump to it"));
     if (!list.length) el.append(h("p", { class: "empty" }, filtering ? (state.pinnedOnly && !q ? "Nothing pinned yet. Tap a message and choose Pin." : "No messages match.") : "No messages yet. Say hello."));
     var lastDay = "", prev = null;
@@ -1441,32 +1483,33 @@
             onclick: function () { toggleReaction(m, em); } }, em, h("span", null, who.length));
         })) : null,
         open && h("div", { class: "actions" },
-          EMOJI.map(function (em) { return h("button", { type: "button", class: "pick", "aria-label": "React " + em, onclick: function () { state.openMsg = null; toggleReaction(m, em); } }, em); }),
+          h("div", { class: "picks" }, EMOJI.map(function (em) { return h("button", { type: "button", class: "pick", "aria-label": "React " + em, onclick: function () { state.openMsg = null; toggleReaction(m, em); } }, em); })),
+          h("div", { class: "act-list" },
           m.file_path && state.urls[m.file_path] && (INLINE_IMAGES.test(m.file_type || "")
-            ? h("button", { type: "button", class: "act mono", onclick: function () { viewPhoto(m); } }, "View photo")
-            : h("a", { class: "act mono", href: state.urls[m.file_path], target: "_blank", rel: "noopener noreferrer" }, "Open file")),
-          h("button", { type: "button", class: "act mono", onclick: function () {
+            ? h("button", { type: "button", class: "act", onclick: function () { viewPhoto(m); } }, "View photo")
+            : h("a", { class: "act", href: state.urls[m.file_path], target: "_blank", rel: "noopener noreferrer" }, "Open file")),
+          h("button", { type: "button", class: "act", onclick: function () {
             state.replyTo = m; state.editing = null; state.openMsg = null; paintPending(); paintChat(); ui.box.focus();
           } }, "Reply"),
-          m.body && navigator.clipboard && h("button", { type: "button", class: "act mono", onclick: function () {
+          m.body && navigator.clipboard && h("button", { type: "button", class: "act", onclick: function () {
             navigator.clipboard.writeText(m.body).then(function () { toast("Copied."); }, function () { toast("Could not copy."); });
             state.openMsg = null; paintChat();
           } }, "Copy"),
-          upgraded() && h("button", { type: "button", class: "act mono", onclick: function () {
+          upgraded() && h("button", { type: "button", class: "act", onclick: function () {
             store.update("messages", m.id, { pinned: !m.pinned, pinned_by: m.pinned ? null : me })
               .then(function () { state.openMsg = null; refresh("messages"); }).catch(fail);
           } }, m.pinned ? "Unpin" : "Pin"),
-          upgraded() && mine && m.body && !m.poll && h("button", { type: "button", class: "act mono", onclick: function () {
+          upgraded() && mine && m.body && !m.poll && h("button", { type: "button", class: "act", onclick: function () {
             state.editing = m; state.replyTo = null; state.openMsg = null;
             ui.box.value = m.body; ui.grow(); paintPending(); paintChat(); ui.box.focus();
           } }, "Edit"),
-          mine && h("button", { type: "button", class: "act mono danger", onclick: function () {
+          mine && h("button", { type: "button", class: "act danger", onclick: function () {
             var path = m.file_path;
             store.remove("messages", m.id).then(function () {
               removeStored(path);
               state.openMsg = null; refresh("messages");
             }).catch(fail);
-          } }, "Delete")),
+          } }, "Delete"))),
         seen[m.id] && !filtering && h("p", { class: "seen mono" }, "Seen by " + seen[m.id].join(", ")));
       el.append(row);
       prev = m;
@@ -1806,8 +1849,7 @@
     var done = inCat.filter(function (m) { return m.done; }).length;
     ui.progText.textContent = inCat.length ? done + " of " + inCat.length + " complete" : "Nothing yet";
     ui.progBar.style.width = (inCat.length ? Math.round(done / inCat.length * 100) : 0) + "%";
-    var late = state.missions.filter(function (m) { return !m.done && m.owner === me && m.due && m.due < t; }).length;
-    if (ui.overdue) { ui.overdue.hidden = !late; ui.overdue.setAttribute("aria-label", late + " of your missions overdue"); }
+    overdueBadge();
     ui.mStatus.select(state.filter);
     ui.mArea.value = state.cat;
 
@@ -2231,7 +2273,12 @@
           .forEach(function (t) { ch.on("postgres_changes", { event: "*", schema: "public", table: t }, function () { cb(t); }); });
         ch.subscribe();
         // catch up on anything missed while the tab was in the background
-        var wake = function () { if (!document.hidden) TABLES.forEach(cb); };
+        var away = 0;
+        var wake = function () {
+          if (document.hidden) { away = Date.now(); return; }
+          if (away && Date.now() - away > 20000) TABLES.forEach(cb);
+          away = 0;
+        };
         document.addEventListener("visibilitychange", wake);
         return function () { sb.removeChannel(ch); document.removeEventListener("visibilitychange", wake); };
       }
