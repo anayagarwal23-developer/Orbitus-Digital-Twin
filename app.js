@@ -1174,6 +1174,13 @@
     var box = ui.box;
     function grow() { box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 140) + "px"; }
     ui.msgs.addEventListener("scroll", updateJump, { passive: true });
+    // tapping anywhere else, or Escape, closes an open message menu
+    ui.msgs.addEventListener("click", function (e) {
+      if (state.openMsg && !e.target.closest(".msg.open")) { e.stopPropagation(); state.openMsg = null; paintChat(); }
+    }, true);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && state.openMsg && state.tab === "chat") { state.openMsg = null; paintChat(); }
+    });
     box.addEventListener("input", function () {
       grow(); paintSuggest();
       // keep an unsent message if the app is closed by accident
@@ -1383,8 +1390,13 @@
   }
   function toggleReaction(m, emoji) {
     var mine = state.reactions.some(function (r) { return r.message_id === m.id && r.user_id === state.user.id && r.emoji === emoji; });
-    (mine ? store.unreact(m.id, state.user.id, emoji) : store.react(m.id, state.user.id, emoji))
-      .then(function () { refresh("reactions"); }).catch(fail);
+    var uid = state.user.id, before = state.reactions;
+    // show it straight away; the saved list replaces this once the server answers
+    state.reactions = mine ? before.filter(function (r) { return !(r.message_id === m.id && r.user_id === uid && r.emoji === emoji); })
+      : before.concat([{ message_id: m.id, user_id: uid, emoji: emoji, created_at: new Date().toISOString() }]);
+    state.openMsg = null; paintChat();
+    (mine ? store.unreact(m.id, uid, emoji) : store.react(m.id, uid, emoji))
+      .then(function () { refresh("reactions"); }).catch(function (e) { state.reactions = before; paintChat(); fail(e); });
   }
   // who has read up to which message: each teammate's marker sits on the last message they have seen
   function seenMap() {
@@ -1423,6 +1435,7 @@
     var hiddenOlder = 0;
     if (!filtering && list.length > state.chatLimit) { hiddenOlder = list.length - state.chatLimit; list = list.slice(-state.chatLimit); }
     clear(el);
+    el.classList.toggle("has-open", !!state.openMsg && !filtering);
     if (hiddenOlder) el.append(h("button", { class: "older mono", type: "button", onclick: function () {
       var h0 = el.scrollHeight; state.chatLimit += 150; paintChat(); el.scrollTop += el.scrollHeight - h0;
     } }, "Show " + Math.min(150, hiddenOlder) + " earlier messages"));
@@ -1470,32 +1483,33 @@
             onclick: function () { toggleReaction(m, em); } }, em, h("span", null, who.length));
         })) : null,
         open && h("div", { class: "actions" },
-          EMOJI.map(function (em) { return h("button", { type: "button", class: "pick", "aria-label": "React " + em, onclick: function () { state.openMsg = null; toggleReaction(m, em); } }, em); }),
+          h("div", { class: "picks" }, EMOJI.map(function (em) { return h("button", { type: "button", class: "pick", "aria-label": "React " + em, onclick: function () { state.openMsg = null; toggleReaction(m, em); } }, em); })),
+          h("div", { class: "act-list" },
           m.file_path && state.urls[m.file_path] && (INLINE_IMAGES.test(m.file_type || "")
-            ? h("button", { type: "button", class: "act mono", onclick: function () { viewPhoto(m); } }, "View photo")
-            : h("a", { class: "act mono", href: state.urls[m.file_path], target: "_blank", rel: "noopener noreferrer" }, "Open file")),
-          h("button", { type: "button", class: "act mono", onclick: function () {
+            ? h("button", { type: "button", class: "act", onclick: function () { viewPhoto(m); } }, "View photo")
+            : h("a", { class: "act", href: state.urls[m.file_path], target: "_blank", rel: "noopener noreferrer" }, "Open file")),
+          h("button", { type: "button", class: "act", onclick: function () {
             state.replyTo = m; state.editing = null; state.openMsg = null; paintPending(); paintChat(); ui.box.focus();
           } }, "Reply"),
-          m.body && navigator.clipboard && h("button", { type: "button", class: "act mono", onclick: function () {
+          m.body && navigator.clipboard && h("button", { type: "button", class: "act", onclick: function () {
             navigator.clipboard.writeText(m.body).then(function () { toast("Copied."); }, function () { toast("Could not copy."); });
             state.openMsg = null; paintChat();
           } }, "Copy"),
-          upgraded() && h("button", { type: "button", class: "act mono", onclick: function () {
+          upgraded() && h("button", { type: "button", class: "act", onclick: function () {
             store.update("messages", m.id, { pinned: !m.pinned, pinned_by: m.pinned ? null : me })
               .then(function () { state.openMsg = null; refresh("messages"); }).catch(fail);
           } }, m.pinned ? "Unpin" : "Pin"),
-          upgraded() && mine && m.body && !m.poll && h("button", { type: "button", class: "act mono", onclick: function () {
+          upgraded() && mine && m.body && !m.poll && h("button", { type: "button", class: "act", onclick: function () {
             state.editing = m; state.replyTo = null; state.openMsg = null;
             ui.box.value = m.body; ui.grow(); paintPending(); paintChat(); ui.box.focus();
           } }, "Edit"),
-          mine && h("button", { type: "button", class: "act mono danger", onclick: function () {
+          mine && h("button", { type: "button", class: "act danger", onclick: function () {
             var path = m.file_path;
             store.remove("messages", m.id).then(function () {
               removeStored(path);
               state.openMsg = null; refresh("messages");
             }).catch(fail);
-          } }, "Delete")),
+          } }, "Delete"))),
         seen[m.id] && !filtering && h("p", { class: "seen mono" }, "Seen by " + seen[m.id].join(", ")));
       el.append(row);
       prev = m;
