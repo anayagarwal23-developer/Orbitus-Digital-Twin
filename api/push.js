@@ -56,7 +56,7 @@ function preview(m) {
 
 async function notify(token, messageId) {
   const me = await api(token, "/auth/v1/user");
-  const found = await api(token, "/rest/v1/messages?select=id,user_id,body,file_name,poll,created_at&id=eq." + encodeURIComponent(messageId));
+  const found = await api(token, "/rest/v1/messages?select=*&id=eq." + encodeURIComponent(messageId));
   const m = found[0];
   if (!m || m.user_id !== me.id) { const err = new Error("That is not your message."); err.status = 403; throw err; }
   if (Date.now() - new Date(m.created_at).getTime() > 2 * 60 * 1000) return { sent: 0, skipped: 0, removed: 0 };
@@ -79,7 +79,7 @@ async function notify(token, messageId) {
     const mentioned = !!name && new RegExp("@" + escapeRe(name) + "(?![\\w])", "i").test(m.body || "");
     if (s.mode === "mentions" && !mentioned) { skipped++; return; }
     const payload = JSON.stringify({
-      title: mentioned ? sender + " mentioned you" : sender,
+      title: (mentioned ? sender + " mentioned you" : sender) + (m.channel && m.channel !== "team" ? " · " + m.channel.charAt(0).toUpperCase() + m.channel.slice(1) : ""),
       body: body, url: "/?tab=chat", tag: "orbitus-chat"
     });
     try {

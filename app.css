@@ -230,6 +230,10 @@ button.cell:hover{border-color:var(--olo)}
 .chips{display:flex;gap:8px;margin:18px 0 6px}
 .chip{min-height:38px;padding:0 14px;border:1px solid var(--line-2);border-radius:999px;background:transparent;color:var(--mut);font-size:11px}
 .chip[aria-pressed=true]{border-color:var(--olo);color:var(--olo);background:rgb(0 255 204 / .08)}
+.channels{margin:0 0 4px;gap:6px}
+.chip.channel{display:inline-flex;align-items:center;gap:6px;min-height:34px;font-size:14px}
+.chip.channel.on{border-color:var(--olo);color:var(--olo);background:rgb(0 255 204 / .08)}
+.ch-n{min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:var(--pink);color:#fff;font:700 11px/18px var(--fd);text-align:center}
 .m-list li{display:flex;gap:14px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line-2)}
 .m-list li.empty{border:0}
 .m-list li > div:not(.tools){flex:1;min-width:0}

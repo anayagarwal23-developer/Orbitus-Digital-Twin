@@ -78,7 +78,7 @@ browser, so the screens can be tried before anything is connected.
 - `index.html`, `app.css`, `app.js`: the app
 - `config.js`: Supabase connection settings
 - `supabase/setup.sql`: tables, storage and privacy rules (everything)
-- `supabase/upgrade-1.sql`, `supabase/upgrade-2.sql`: the later additions, for a
+- `supabase/upgrade-1.sql`, `supabase/upgrade-2.sql`, `supabase/upgrade-3.sql` (chat channels): the later additions, for a
   project that was set up before them (run in order, each is safe to repeat)
 - `supabase/fix-sign-in.sql`: one-paste fix for sign-in problems (see above)
 - `api/push.js`: the small function that sends phone notifications
