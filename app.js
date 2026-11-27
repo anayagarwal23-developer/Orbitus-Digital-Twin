@@ -55,6 +55,7 @@
     cat: "all",
     folder: "all",
     openMsg: null,
+    channel: (function () { try { return localStorage.getItem("orbitus-channel") || "team"; } catch (e) { return "team"; } })(),
     replyTo: null,
     editing: null,
     file: null,
@@ -177,6 +178,19 @@
   }
   function fail(err) { toast(explain(err)); }
   function seenKey() { return "orbitus-seen-" + (state.user ? state.user.id : ""); }
+  // chat channels: the main team chat plus smaller ones for each area
+  var CHANNELS = [["team", "Team"], ["design", "Design"], ["engineering", "Engineering"], ["enterprise", "Enterprise"], ["portfolio", "Portfolio"]];
+  function hasChannels() { return state.messages.length > 0 && "channel" in state.messages[0]; }
+  function chOf(m) { return m.channel || "team"; }
+  function chName(ch) { var c = CHANNELS.filter(function (x) { return x[0] === ch; })[0]; return c ? c[1] : "Team"; }
+  function inChannel(m) { return chOf(m) === state.channel; }
+  function chSeen(ch) { if (ch === "team") return getSeen(); try { return +localStorage.getItem(seenKey() + ":" + ch) || 0; } catch (e) { return 0; } }
+  function setChSeen(ch, id) { if (ch === "team") { setSeen(id); return; } try { localStorage.setItem(seenKey() + ":" + ch, String(id)); } catch (e) {} }
+  function unreadIn(ch) {
+    var seen = chSeen(ch), me = state.user && state.user.id;
+    return state.messages.filter(function (m) { return chOf(m) === ch && m.id > seen && m.user_id !== me; }).length;
+  }
+  function unreadCount() { return CHANNELS.reduce(function (n, c) { return n + unreadIn(c[0]); }, 0); }
   function getSeen() { try { return +localStorage.getItem(seenKey()) || 0; } catch (e) { return 0; } }
   function setSeen(id) { try { localStorage.setItem(seenKey(), String(id)); } catch (e) {} }
   function tidyAddress() { if (location.hash) history.replaceState(null, "", location.pathname + location.search); }
@@ -563,7 +577,12 @@
     file: "M7 3h7l5 5v13H7zM14 3v5h5",
     poll: "M6 20V11M12 20V4M18 20v-6",
     pin: "M9 4h6l-1 6 3 3v2H7v-2l3-3zM12 15v6",
-    search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM16.5 16.5L21 21"
+    search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM16.5 16.5L21 21",
+    "ch-team": "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.5a3 3 0 0 1 0 5.6M18 14.3c1.8.8 3 2.6 3 4.7",
+    "ch-design": "M4 20l4-1 11-11-3-3L5 16zM14 7l3 3",
+    "ch-engineering": "M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z",
+    "ch-enterprise": "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
+    "ch-portfolio": "M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h10"
   };
   function icon(name) {
     var ns = "http://www.w3.org/2000/svg";
@@ -584,12 +603,17 @@
       home: homeView(), chat: chatView(), calendar: calendarView(), missions: missionsView(),
       car: carView(), budget: budgetView(), files: filesView(), settings: settingsView(), more: moreView()
     };
-    var nav = h("nav", { class: "tabs", "aria-label": "Sections" }, TABS.map(function (t, i) {
+    var tabBtn = function (t, i) {
       var dot = t[0] === "chat" ? (ui.unread = h("b", { class: "unread", hidden: true }))
         : t[0] === "missions" ? (ui.overdue = h("b", { class: "unread", hidden: true })) : null;
-      return (ui.tabs[t[0]] = h("button", { type: "button", class: i > 3 ? "extra" : null, onclick: function () { if (state.tab === t[0]) toTop(t[0]); else go(t[0]); } },
+      return (ui.tabs[t[0]] = h("button", { type: "button", class: (i > 3 ? "extra" : "") + (t[0] === "chat" ? " chat-tab" : "") + (t[0] === "settings" ? " side-hide" : "") || null, onclick: function () { if (state.tab === t[0]) toTop(t[0]); else go(t[0]); } },
         icon(t[0]), h("span", null, t[1]), dot));
-    }), (ui.moreBtn = h("button", { type: "button", class: "more-btn", onclick: function () { go("more"); } }, icon("more"), h("span", null, "More"))));
+    };
+    // on a computer the sidebar is grouped, and every chat has its own tile
+    var nav = h("nav", { class: "tabs", "aria-label": "Sections" }, tabBtn(TABS[0], 0), tabBtn(TABS[1], 1),
+      h("p", { class: "side-h mono" }, "Chats"), (ui.sideChats = h("div", { class: "side-chats" })),
+      h("p", { class: "side-h mono" }, "Plan"), tabBtn(TABS[2], 2), tabBtn(TABS[3], 3),
+      h("p", { class: "side-h mono" }, "Track"), TABS.slice(4).map(function (t, i) { return tabBtn(t, i + 4); }), (ui.moreBtn = h("button", { type: "button", class: "more-btn", onclick: function () { go("more"); } }, icon("more"), h("span", null, "More"))));
     ui.acct = h("button", { class: "acct", type: "button", onclick: function () { go("settings"); }, "aria-label": "Settings" });
     clear(app).append(h("div", { class: "shell" },
       h("header", { class: "brand" }, h("div", { class: "wordmark sm" }, "ORB", h("i", null, "!"), "TUS"), h("p", { class: "mono sub" }, "Digital twin")),
@@ -649,6 +673,7 @@
       else ui.tabs[t[0]].removeAttribute("aria-current");
     });
     if (inMore) ui.moreBtn.setAttribute("aria-current", "page"); else ui.moreBtn.removeAttribute("aria-current");
+    paintChannels();
     if (dirty[tab] && PAINTERS[tab]) { dirty[tab] = false; PAINTERS[tab](); }
     else if (tab === "home") paintHome();
     if (tab === "chat") { markSeen(); scrollChat(); }
@@ -776,7 +801,7 @@
       h("div", null, h("p", { class: "mono" }, "Next competition"), h("h2", null, c.name || "Competition"), h("p", { class: "dim" }, fmtDay(c.date, true))),
       h("button", { class: "btn sm", type: "button", onclick: editCompetition }, "Change"));
 
-    var unread = state.messages.filter(function (m) { return m.id > getSeen() && m.user_id !== me; }).length;
+    var unread = unreadCount();
     var open = state.missions.filter(function (m) { return !m.done; }).length;
     var best = state.runs.reduce(function (b, r) { return b === null || +r.time_s < b ? +r.time_s : b; }, null);
     add(clear(ui.homeStats), [
@@ -1205,7 +1230,7 @@
   /* ---------- chat ---------- */
   function chatView() {
     ui.msgs = h("div", { class: "msgs", role: "log", "aria-live": "polite", tabindex: "0" });
-    ui.box = h("textarea", { rows: 1, maxlength: 2000, placeholder: "Message the team", "aria-label": "Message" });
+    ui.box = h("textarea", { rows: 1, maxlength: 2000, placeholder: state.channel === "team" ? "Message the team" : "Message " + chName(state.channel), "aria-label": "Message" });
     ui.replyBar = h("div", { class: "pending", hidden: true });
     ui.fileBar = h("div", { class: "pending", hidden: true });
     ui.suggest = h("div", { class: "suggest", role: "listbox", "aria-label": "Mention someone", hidden: true });
@@ -1266,12 +1291,13 @@
     });
     ui.grow = grow;
     return h("section", { class: "view chat", "aria-label": "Chat", hidden: true },
-      h("header", { class: "view-h" }, h("h1", null, "Chat"),
+      h("header", { class: "view-h" }, (ui.chatTitle = h("h1", null, "Chat")),
         h("div", { class: "tools" }, ui.pinBtn,
           iconBtn("search", "Search messages", function () {
             ui.searchRow.hidden = !ui.searchRow.hidden;
             if (ui.searchRow.hidden) { ui.searchBox.value = ""; state.search = ""; paintChat(); } else ui.searchBox.focus();
           }))),
+      (ui.channels = h("div", { class: "channels chips scroll", role: "tablist", "aria-label": "Chats", hidden: true })),
       ui.searchRow,
       ui.msgs,
       h("div", { class: "composer-wrap" },
@@ -1311,6 +1337,7 @@
     var up = file ? store.upload(state.user.id, file) : Promise.resolve(null);
     up.then(function (path) {
       var row = { user_id: state.user.id, body: body, reply_to: reply ? reply.id : null };
+      if (hasChannels()) row.channel = state.channel;
       if (path) { row.file_path = path; row.file_name = file.name.slice(0, 200); row.file_type = (file.type || "application/octet-stream").slice(0, 120); row.file_size = file.size; }
       return store.add("messages", row);
     }).then(afterSend).catch(fail).then(function () { ui.send.disabled = false; setSend(state.editing ? "Save" : "Send"); });
@@ -1326,7 +1353,9 @@
       var list = opts.map(function (o) { return o.value.trim(); }).filter(Boolean);
       if (!q.value.trim()) return "Ask a question.";
       if (list.length < 2) return "Add at least two options.";
-      return store.add("messages", { user_id: state.user.id, body: "", poll: { q: q.value.trim(), options: list } }).then(function (saved) {
+      var poll = { user_id: state.user.id, body: "", poll: { q: q.value.trim(), options: list } };
+      if (hasChannels()) poll.channel = state.channel;
+      return store.add("messages", poll).then(function (saved) {
         if (saved && saved.id) store.notify(saved.id);
         refresh("messages");
       });
@@ -1478,11 +1507,14 @@
     ui.stick = nearBottom;
     var re = mentionRe(), myName = nameOf(me).toLowerCase(), seen = seenMap();
     var q = state.search.toLowerCase(), filtering = !!q || state.pinnedOnly;
-    var pinned = state.messages.filter(function (m) { return m.pinned; }).length;
+    if (!hasChannels()) state.channel = "team";
+    paintChannels();
+    var here = state.messages.filter(inChannel);
+    var pinned = here.filter(function (m) { return m.pinned; }).length;
     ui.pinBtn.textContent = "Pinned" + (pinned ? " " + pinned : "");
     ui.pinBtn.setAttribute("aria-pressed", state.pinnedOnly ? "true" : "false");
     ui.pinBtn.hidden = !upgraded();
-    var list = !filtering ? state.messages : state.messages.filter(function (m) {
+    var list = !filtering ? here : here.filter(function (m) {
       if (state.pinnedOnly && !m.pinned) return false;
       return !q || [m.body, m.file_name, m.poll && m.poll.q, nameOf(m.user_id)].join(" ").toLowerCase().indexOf(q) >= 0;
     });
@@ -1582,10 +1614,40 @@
     ui.jump.hidden = !away || !!state.search || state.pinnedOnly;
     ui.jump.textContent = last > (ui.bottomId || 0) ? "New messages ↓" : "Latest ↓";
   }
-  function lastMsgId() { return state.messages.length ? state.messages[state.messages.length - 1].id : 0; }
+  function paintChannels() {
+    if (ui.sideChats) add(clear(ui.sideChats), CHANNELS.filter(function (c) { return hasChannels() || c[0] === "team"; }).map(function (c) {
+      var cur = state.tab === "chat" && c[0] === state.channel, n = cur ? 0 : unreadIn(c[0]);
+      return h("button", { type: "button", class: "side-chat ch-" + c[0], "aria-current": cur ? "page" : null,
+        onclick: function () { if (!cur) openChannel(c[0]); } },
+        h("span", { class: "ch-tile" }, icon("ch-" + c[0])), h("span", null, hasChannels() ? c[1] : "Chat"),
+        n ? h("b", { class: "ch-n", "aria-label": n + " new" }, n > 99 ? "99+" : String(n)) : null);
+    }));
+    if (ui.chatTitle) ui.chatTitle.textContent = hasChannels() ? chName(state.channel) : "Chat";
+    if (!ui.channels) return;
+    ui.channels.hidden = !hasChannels();
+    if (ui.channels.hidden) return;
+    add(clear(ui.channels), CHANNELS.map(function (c) {
+      var on = c[0] === state.channel, n = on ? 0 : unreadIn(c[0]);
+      return h("button", { type: "button", role: "tab", class: "chip channel" + (on ? " on" : ""), "aria-selected": on ? "true" : "false",
+        onclick: function () { if (!on) openChannel(c[0]); } }, c[1], n ? h("b", { class: "ch-n", "aria-label": n + " new" }, n > 99 ? "99+" : String(n)) : null);
+    }));
+  }
+  function openChannel(ch) {
+    state.channel = ch; state.openMsg = null; state.replyTo = null; state.editing = null;
+    try { localStorage.setItem("orbitus-channel", ch); } catch (e) {}
+    if (ui.box) ui.box.placeholder = ch === "team" ? "Message the team" : "Message " + chName(ch);
+    paintPending();
+    if (state.tab !== "chat") go("chat");
+    paintChat(); scrollChat(); markSeen(); updateJump();
+  }
+  function lastMsgId() {
+    for (var i = state.messages.length - 1; i >= 0; i--) if (inChannel(state.messages[i])) return state.messages[i].id;
+    return 0;
+  }
   function markSeen() {
     var last = lastMsgId(), me = state.user.id;
-    setSeen(last); markUnread();
+    if (last > chSeen(state.channel)) setChSeen(state.channel, last);
+    markUnread();
     // tell the team how far this person has read
     if (!upgraded() || !last) return;
     var mine = state.reads.filter(function (r) { return r.user_id === me; })[0];
@@ -1594,8 +1656,8 @@
     store.upsert("reads", { user_id: me, last_read: last, updated_at: new Date().toISOString() }, "user_id").catch(function () {});
   }
   function markUnread() {
-    var seen = getSeen(), me = state.user && state.user.id;
-    var n = state.messages.filter(function (m) { return m.id > seen && m.user_id !== me; }).length;
+    var n = unreadCount();
+    paintChannels();
     if (ui.unread) { ui.unread.hidden = !n; ui.unread.setAttribute("aria-label", n + " new messages"); }
     document.title = n ? "(" + n + ") " + TITLE : TITLE;
     try { if (navigator.setAppBadge) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(function () {}); } catch (e) {}
@@ -2386,6 +2448,7 @@
     }
     try { db = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
     if (!db || !db.profiles) db = seed();
+    db.messages.forEach(function (m) { if (!m.channel) m.channel = "team"; });
     function save() {
       try { localStorage.setItem(KEY, JSON.stringify(db)); }
       catch (e) { return Promise.reject(new Error("Demo storage is full. Remove some files.")); }
