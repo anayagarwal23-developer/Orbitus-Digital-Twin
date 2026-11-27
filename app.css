@@ -101,15 +101,28 @@ label{display:block;margin:16px 0 6px;font-family:var(--fm);font-size:11.5px;let
 .view.home > *,.view.car > *,.view.budget > *,.view.files > *,.view.more > *{flex-shrink:0}
 
 .tabs .extra{display:none}
+.side-h,.side-chats{display:none}
+.ch-tile{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:8px}
+.tabs .ch-tile svg{width:16px;height:16px;stroke-width:1.9}
+.ch-team .ch-tile{background:var(--olo);color:#000}
+.ch-design .ch-tile{background:var(--pink);color:#fff}
+.ch-engineering .ch-tile{background:var(--laser);color:var(--vanilla)}
+.ch-enterprise .ch-tile{background:var(--vanilla);color:#000}
+.ch-portfolio .ch-tile{background:#000;color:var(--olo);box-shadow:inset 0 0 0 1.5px var(--olo)}
 .dots-icon path{stroke-width:3.4}
 @media(min-width:860px){
   .tabs .extra{display:flex}
   .tabs .more-btn{display:none}
+  .tabs .chat-tab,.tabs .side-hide,.view .channels.chips{display:none}
+  .side-h{display:block;margin:16px 12px 4px;font-size:10px;color:var(--mut);opacity:.75}
+  .side-chats{display:flex;flex-direction:column;gap:2px}
+  .tabs .side-chat{padding:7px 10px}
+  .side-chat .ch-n{margin-left:auto}
   .tabs{overflow-y:auto}
   .shell{grid-template:"brand main" auto "tabs main" minmax(0,1fr) "acct main" auto / 232px minmax(0,1fr)}
   .brand{padding:26px 22px 22px}
-  .tabs{flex-direction:column;gap:4px;padding:0 12px;border-top:0;background:none}
-  .tabs button{flex:none;flex-direction:row;gap:12px;padding:13px 12px;border-radius:12px;font-size:11px}
+  .tabs{flex-direction:column;gap:2px;padding:0 12px 12px;border-top:0;background:none}
+  .tabs button{flex:none;flex-direction:row;gap:12px;padding:10px 12px;border-radius:12px;font-size:11px}
   .tabs button[aria-current]{background:rgb(0 255 204 / .08)}
   .unread{position:static;margin-left:auto}
   .acct{margin:16px 12px 20px;justify-self:start}
